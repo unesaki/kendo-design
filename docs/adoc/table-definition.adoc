@@ -1,352 +1,1131 @@
 == アカウント管理機能
 
 === users テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名           | 型            | 制約                                          | 説明
-| id                | BIGINT        | PK, AUTO_INCREMENT                           | ユーザーID
-| email             | VARCHAR(100)  | UNIQUE, NOT NULL                             | ログイン用メールアドレス
-| password_hash     | VARCHAR(255)  | NOT NULL                                     | ハッシュ化済パスワード
-| is_email_verified | BOOLEAN       | DEFAULT FALSE                                | メール認証済みか
-| is_enabled        | BOOLEAN       | DEFAULT TRUE                                 | アカウントの有効状態
-| created_at        | DATETIME      | DEFAULT CURRENT_TIMESTAMP                    | 登録日時
-| updated_at        | DATETIME      | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|ユーザーID
+
+|email
+|VARCHAR(100)
+|UNIQUE, NOT NULL
+|ログイン用メールアドレス
+
+|password_hash
+|VARCHAR(255)
+|NOT NULL
+|ハッシュ化済パスワード
+
+|is_email_verified
+|BOOLEAN
+|DEFAULT FALSE
+|メール認証済みか
+
+|is_enabled
+|BOOLEAN
+|DEFAULT TRUE
+|アカウントの有効状態
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === user_profiles テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名           | 型            | 制約                            | 説明
-| user_id           | BIGINT        | PK, FK → users.id               | 対象ユーザーID
-| name              | VARCHAR(50)   | NOT NULL                        | 表示名（プロフィール名）
-| nickname          | VARCHAR(50)   |                                  | ニックネーム
-| profile_image_url | TEXT          |                                  | プロフィール画像URL
-| created_at        | DATETIME      | DEFAULT CURRENT_TIMESTAMP        | 登録日時
-| updated_at        | DATETIME      | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|user_id
+|BIGINT
+|PK, FK → users.id
+|対象ユーザーID
+
+|name
+|VARCHAR(50)
+|NOT NULL
+|表示名（プロフィール名）
+
+|nickname
+|VARCHAR(50)
+|
+|ニックネーム
+
+|profile_image_url
+|TEXT
+|
+|プロフィール画像URL
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === password_reset_tokens テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名      | 型             | 制約                            | 説明
-| id           | BIGINT         | PK, AUTO_INCREMENT               | トークンID
-| user_id      | BIGINT         | FK → users.id                    | 対象ユーザーID
-| token        | VARCHAR(255)   | UNIQUE, NOT NULL                 | リセット用トークン
-| expires_at   | DATETIME       | NOT NULL                         | 有効期限（1時間想定）
-| is_used      | BOOLEAN        | DEFAULT FALSE                    | 使用済みフラグ
-| created_at   | DATETIME       | DEFAULT CURRENT_TIMESTAMP        | 登録日時
-| updated_at   | DATETIME       | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|トークンID
+
+|user_id
+|BIGINT
+|FK → users.id
+|対象ユーザーID
+
+|token
+|VARCHAR(255)
+|UNIQUE, NOT NULL
+|リセット用トークン
+
+|expires_at
+|DATETIME
+|NOT NULL
+|有効期限（1時間想定）
+
+|is_used
+|BOOLEAN
+|DEFAULT FALSE
+|使用済みフラグ
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === email_verification_tokens テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名      | 型             | 制約                            | 説明
-| id           | BIGINT         | PK, AUTO_INCREMENT               | トークンID
-| user_id      | BIGINT         | FK → users.id                    | 対象ユーザーID
-| token        | VARCHAR(255)   | UNIQUE, NOT NULL                 | 認証用トークン
-| expires_at   | DATETIME       | NOT NULL                         | 有効期限
-| is_verified  | BOOLEAN        | DEFAULT FALSE                    | 認証済みかどうか
-| created_at   | DATETIME       | DEFAULT CURRENT_TIMESTAMP        | 発行日時
-| updated_at   | DATETIME       | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|トークンID
+
+|user_id
+|BIGINT
+|FK → users.id
+|対象ユーザーID
+
+|token
+|VARCHAR(255)
+|UNIQUE, NOT NULL
+|認証用トークン
+
+|expires_at
+|DATETIME
+|NOT NULL
+|有効期限
+
+|is_verified
+|BOOLEAN
+|DEFAULT FALSE
+|認証済みかどうか
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|発行日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === user_sessions テーブル
-[cols="1,1,1,2", options="header"]
-|===
-| カラム名      | 型             | 制約                            | 説明
-| id           | BIGINT         | PK, AUTO_INCREMENT               | セッションID
-| user_id      | BIGINT         | FK → users.id                    | ユーザーID
-| token        | VARCHAR(512)   | NOT NULL                         | JWTや識別トークン
-| is_active    | BOOLEAN        | DEFAULT TRUE                     | 有効状態
-| issued_at    | DATETIME       | NOT NULL                         | 発行日時
-| expires_at   | DATETIME       | NOT NULL                         | 有効期限（例：24時間）
-| revoked_at   | DATETIME       |                                  | 無効化日時（任意）
-| created_at   | DATETIME       | DEFAULT CURRENT_TIMESTAMP        | 登録日時
-| updated_at   | DATETIME       | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
-|===
 
+|===
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|セッションID
+
+|user_id
+|BIGINT
+|FK → users.id
+|ユーザーID
+
+|token
+|VARCHAR(512)
+|NOT NULL
+|JWTや識別トークン
+
+|is_active
+|BOOLEAN
+|DEFAULT TRUE
+|有効状態
+
+|issued_at
+|DATETIME
+|NOT NULL
+|発行日時
+
+|expires_at
+|DATETIME
+|NOT NULL
+|有効期限（例：24時間）
+
+|revoked_at
+|DATETIME
+|
+|無効化日時（任意）
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
+|===
 
 == お知らせ機能
 
 === notifications テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名          | 型             | 制約                              | 説明
-| id               | BIGINT         | PK, AUTO_INCREMENT                 | お知らせID
-| title            | VARCHAR(100)   | NOT NULL                           | お知らせタイトル
-| content          | TEXT           | NOT NULL                           | 本文（HTMLやMarkdown可）
-| published_at     | DATETIME       | NOT NULL                           | 公開日時
-| target_scope     | VARCHAR(20)    |                                     | 対象範囲（ALL, CLUBなど）
-| target_condition | VARCHAR(255)   |                                     | 条件（JSONやタグID等）
-| created_at       | DATETIME       | DEFAULT CURRENT_TIMESTAMP          | 登録日時
-| updated_at       | DATETIME       | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|お知らせID
+
+|title
+|VARCHAR(100)
+|NOT NULL
+|お知らせタイトル
+
+|content
+|TEXT
+|NOT NULL
+|本文（HTMLやMarkdown可）
+
+|published_at
+|DATETIME
+|NOT NULL
+|公開日時
+
+|target_scope
+|VARCHAR(20)
+|
+|対象範囲（ALL, CLUBなど）
+
+|target_condition
+|VARCHAR(255)
+|
+|条件（JSONやタグID等）
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === user_notification_meta テーブル
-[cols="1,1,1,2", options="header"]
-|===
-| カラム名         | 型        | 制約                               | 説明
-| user_id         | BIGINT    | PK, FK → users.id                  | 対象ユーザーID
-| notification_id | BIGINT    | PK, FK → notifications.id          | 対象お知らせID
-| is_deleted      | BOOLEAN   | DEFAULT FALSE                      | ユーザー側で非表示にしたかどうか
-| is_bookmarked   | BOOLEAN   | DEFAULT FALSE                      | ブックマーク状態
-| created_at      | DATETIME  | DEFAULT CURRENT_TIMESTAMP          | 登録日時
-| updated_at      | DATETIME  | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
-|===
 
+|===
+|カラム名 |型 |制約 |説明
+
+|user_id
+|BIGINT
+|PK, FK → users.id
+|対象ユーザーID
+
+|notification_id
+|BIGINT
+|PK, FK → notifications.id
+|対象お知らせID
+
+|is_deleted
+|BOOLEAN
+|DEFAULT FALSE
+|ユーザー側で非表示にしたかどうか
+
+|is_bookmarked
+|BOOLEAN
+|DEFAULT FALSE
+|ブックマーク状態
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
+|===
 
 == クラブ管理機能
 
 === clubs テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名    | 型            | 制約                            | 説明
-| id         | BIGINT        | PK, AUTO_INCREMENT              | クラブID
-| name       | VARCHAR(100)  | NOT NULL                        | クラブ名（重複可）
-| created_by | BIGINT        | FK → users.id                   | 作成ユーザーID（初期管理者）
-| created_at | DATETIME      | DEFAULT CURRENT_TIMESTAMP       | 登録日時
-| updated_at | DATETIME      | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|クラブID
+
+|name
+|VARCHAR(100)
+|NOT NULL
+|クラブ名（重複可）
+
+|created_by
+|BIGINT
+|FK → users.id
+|作成ユーザーID（初期管理者）
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === club_members テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名    | 型                              | 制約                             | 説明
-| user_id    | BIGINT                          | PK, FK → users.id                | ユーザーID
-| club_id    | BIGINT                          | PK, FK → clubs.id                | クラブID
-| role       | ENUM('admin', 'member')         | NOT NULL                         | ロール（管理者／参加者）
-| created_at | DATETIME                        | DEFAULT CURRENT_TIMESTAMP        | 登録日時
-| updated_at | DATETIME                        | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|user_id
+|BIGINT
+|PK, FK → users.id
+|ユーザーID
+
+|club_id
+|BIGINT
+|PK, FK → clubs.id
+|クラブID
+
+|role
+|ENUM('admin', 'member')
+|NOT NULL
+|ロール（管理者／参加者）
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === club_join_requests テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名      | 型                                              | 制約                              | 説明
-| id           | BIGINT                                          | PK, AUTO_INCREMENT                | 申請ID
-| user_id      | BIGINT                                          | FK → users.id                     | 申請ユーザー
-| club_id      | BIGINT                                          | FK → clubs.id                     | 対象クラブ
-| status       | ENUM('pending', 'approved', 'rejected')        | NOT NULL                          | ステータス
-| requested_at | DATETIME                                        | DEFAULT CURRENT_TIMESTAMP         | 申請日時
-| responded_at | DATETIME                                        |                                    | 対応日時（任意）
-| created_at   | DATETIME                                        | DEFAULT CURRENT_TIMESTAMP         | 登録日時
-| updated_at   | DATETIME                                        | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|申請ID
+
+|user_id
+|BIGINT
+|FK → users.id
+|申請ユーザー
+
+|club_id
+|BIGINT
+|FK → clubs.id
+|対象クラブ
+
+|status
+|ENUM('pending', 'approved', 'rejected')
+|NOT NULL
+|ステータス
+
+|requested_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|申請日時
+
+|responded_at
+|DATETIME
+|
+|対応日時（任意）
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === club_invitations テーブル
-[cols="1,1,1,2", options="header"]
-|===
-| カラム名    | 型            | 制約                            | 説明
-| token      | VARCHAR(255)  | PK                              | 招待トークン（UUID）
-| club_id    | BIGINT        | FK → clubs.id                   | 招待対象クラブ
-| expires_at | DATETIME      | NOT NULL                        | 有効期限（例：1時間）
-| reusable   | BOOLEAN       | DEFAULT FALSE                   | 再利用可能かどうか
-| created_by | BIGINT        | FK → users.id                   | 招待作成ユーザー
-| created_at | DATETIME      | DEFAULT CURRENT_TIMESTAMP       | 登録日時
-| updated_at | DATETIME      | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
-|===
 
+|===
+|カラム名 |型 |制約 |説明
+
+|token
+|VARCHAR(255)
+|PK
+|招待トークン（UUID）
+
+|club_id
+|BIGINT
+|FK → clubs.id
+|招待対象クラブ
+
+|expires_at
+|DATETIME
+|NOT NULL
+|有効期限（例：1時間）
+
+|reusable
+|BOOLEAN
+|DEFAULT FALSE
+|再利用可能かどうか
+
+|created_by
+|BIGINT
+|FK → users.id
+|招待作成ユーザー
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
+|===
 
 == 大会参加機能（補欠対応済）
 
 === tournament_team_entries テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名      | 型            | 制約                            | 説明
-| id           | BIGINT        | PK, AUTO_INCREMENT              | 団体戦エントリーID
-| tournament_id| BIGINT        | FK → tournaments.id             | 対象大会ID
-| club_id      | BIGINT        | FK → clubs.id                   | 所属クラブID
-| team_name    | VARCHAR(100)  |                                  | チーム名（自由入力）
-| status       | ENUM('pending', 'approved', 'withdrawn') | NOT NULL | エントリー状態
-| created_at   | DATETIME      | DEFAULT CURRENT_TIMESTAMP       | 登録日時
-| updated_at   | DATETIME      | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|団体戦エントリーID
+
+|tournament_id
+|BIGINT
+|FK → tournaments.id
+|対象大会ID
+
+|club_id
+|BIGINT
+|FK → clubs.id
+|所属クラブID
+
+|team_name
+|VARCHAR(100)
+|
+|チーム名（自由入力）
+
+|status
+|ENUM('pending', 'approved', 'withdrawn')
+|NOT NULL
+|エントリー状態
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === tournament_team_rosters テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名        | 型            | 制約                            | 説明
-| team_entry_id  | BIGINT        | PK, FK → tournament_team_entries.id | 対象チームエントリーID
-| senpo_name     | VARCHAR(50)   | NOT NULL                         | 先鋒
-| jiho_name      | VARCHAR(50)   | NOT NULL                         | 次鋒
-| chuken_name    | VARCHAR(50)   | NOT NULL                         | 中堅
-| fukusho_name   | VARCHAR(50)   | NOT NULL                         | 副将
-| taisho_name    | VARCHAR(50)   | NOT NULL                         | 大将
-| sub1_name      | VARCHAR(50)   |                                  | 補欠1（任意）
-| sub2_name      | VARCHAR(50)   |                                  | 補欠2（任意）
-| created_at     | DATETIME      | DEFAULT CURRENT_TIMESTAMP        | 登録日時
-| updated_at     | DATETIME      | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|team_entry_id
+|BIGINT
+|PK, FK → tournament_team_entries.id
+|対象チームエントリーID
+
+|senpo_name
+|VARCHAR(50)
+|NOT NULL
+|先鋒
+
+|jiho_name
+|VARCHAR(50)
+|NOT NULL
+|次鋒
+
+|chuken_name
+|VARCHAR(50)
+|NOT NULL
+|中堅
+
+|fukusho_name
+|VARCHAR(50)
+|NOT NULL
+|副将
+
+|taisho_name
+|VARCHAR(50)
+|NOT NULL
+|大将
+
+|sub1_name
+|VARCHAR(50)
+|
+|補欠1（任意）
+
+|sub2_name
+|VARCHAR(50)
+|
+|補欠2（任意）
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === tournament_individual_entries テーブル
-[cols="1,1,1,2", options="header"]
-|===
-| カラム名      | 型            | 制約                            | 説明
-| id           | BIGINT        | PK, AUTO_INCREMENT              | 個人戦エントリーID
-| tournament_id| BIGINT        | FK → tournaments.id             | 対象大会ID
-| user_id      | BIGINT        | FK → users.id                   | 選手ユーザーID
-| status       | ENUM('pending', 'approved', 'withdrawn') | NOT NULL | エントリー状態
-| created_at   | DATETIME      | DEFAULT CURRENT_TIMESTAMP       | 登録日時
-| updated_at   | DATETIME      | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
-|===
 
+|===
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|個人戦エントリーID
+
+|tournament_id
+|BIGINT
+|FK → tournaments.id
+|対象大会ID
+
+|user_id
+|BIGINT
+|FK → users.id
+|選手ユーザーID
+
+|status
+|ENUM('pending', 'approved', 'withdrawn')
+|NOT NULL
+|エントリー状態
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
+|===
 
 == 大会主催管理機能
 
 === tournaments テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名       | 型            | 制約                            | 説明
-| id            | BIGINT        | PK, AUTO_INCREMENT              | 大会ID
-| name          | VARCHAR(100)  | NOT NULL                        | 大会名
-| host_club_id  | BIGINT        | FK → clubs.id                   | 主催クラブID
-| type          | VARCHAR(20)   | NOT NULL                        | 種別（個人戦／団体戦）
-| format        | VARCHAR(20)   | NOT NULL                        | 形式（トーナメント／総当たり）
-| status        | VARCHAR(20)   | NOT NULL                        | ステータス（受付中／進行中／終了）
-| start_date    | DATE          | NOT NULL                        | 開催日
-| end_date      | DATE          |                                  | 終了日（任意）
-| entry_deadline| DATE          |                                  | エントリー締切日
-| public_scope  | VARCHAR(20)   |                                  | 公開範囲（全体／クラブ限定など）
-| created_at    | DATETIME      | DEFAULT CURRENT_TIMESTAMP       | 登録日時
-| updated_at    | DATETIME      | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|大会ID
+
+|name
+|VARCHAR(100)
+|NOT NULL
+|大会名
+
+|host_club_id
+|BIGINT
+|FK → clubs.id
+|主催クラブID
+
+|type
+|VARCHAR(20)
+|NOT NULL
+|種別（個人戦／団体戦）
+
+|format
+|VARCHAR(20)
+|NOT NULL
+|形式（トーナメント／総当たり）
+
+|status
+|VARCHAR(20)
+|NOT NULL
+|ステータス（受付中／進行中／終了）
+
+|start_date
+|DATE
+|NOT NULL
+|開催日
+
+|end_date
+|DATE
+|
+|終了日（任意）
+
+|entry_deadline
+|DATE
+|
+|エントリー締切日
+
+|public_scope
+|VARCHAR(20)
+|
+|公開範囲（全体／クラブ限定など）
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === tournament_matches テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名        | 型            | 制約                            | 説明
-| id             | BIGINT        | PK, AUTO_INCREMENT              | 試合ID
-| tournament_id  | BIGINT        | FK → tournaments.id             | 大会ID
-| round          | VARCHAR(20)   |                                  | ラウンド（例：1回戦）
-| red_entry_id   | BIGINT        | FK → エントリーテーブル         | 赤側参加者（チームまたは個人）
-| white_entry_id | BIGINT        | FK → エントリーテーブル         | 白側参加者
-| status         | VARCHAR(20)   |                                  | 試合状況（未開始／進行中／完了）
-| winner         | ENUM('red', 'white', 'draw') |                  | 勝者
-| published      | BOOLEAN       | DEFAULT FALSE                   | 公開状態
-| created_at     | DATETIME      | DEFAULT CURRENT_TIMESTAMP       | 登録日時
-| updated_at     | DATETIME      | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|試合ID
+
+|tournament_id
+|BIGINT
+|FK → tournaments.id
+|大会ID
+
+|round
+|VARCHAR(20)
+|
+|ラウンド（例：1回戦）
+
+|red_entry_id
+|BIGINT
+|FK → エントリーテーブル
+|赤側参加者（チームまたは個人）
+
+|white_entry_id
+|BIGINT
+|FK → エントリーテーブル
+|白側参加者
+
+|status
+|VARCHAR(20)
+|
+|試合状況（未開始／進行中／完了）
+
+|winner
+|ENUM('red', 'white', 'draw')
+|
+|勝者
+
+|published
+|BOOLEAN
+|DEFAULT FALSE
+|公開状態
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === individual_match_results テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名        | 型                                         | 制約 | 説明
-| match_id       | BIGINT                                     | FK → tournament_matches.id | 試合ID（個人戦）
-| red_score_1    | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |      | 赤の1本目スコア
-| red_score_2    | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |      | 赤の2本目スコア
-| white_score_1  | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |      | 白の1本目スコア
-| white_score_2  | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |      | 白の2本目スコア
-| red_foul       | BOOLEAN                                    |      | 赤の反則（▲）
-| white_foul     | BOOLEAN                                    |      | 白の反則（▲）
-| is_draw        | BOOLEAN                                    |      | 引き分けかどうか
-| created_at     | DATETIME                                   | DEFAULT CURRENT_TIMESTAMP | 登録日時
-| updated_at     | DATETIME                                   | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|match_id
+|BIGINT
+|FK → tournament_matches.id
+|試合ID（個人戦）
+
+|red_score_1
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|赤の1本目スコア
+
+|red_score_2
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|赤の2本目スコア
+
+|white_score_1
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|白の1本目スコア
+
+|white_score_2
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|白の2本目スコア
+
+|red_foul
+|BOOLEAN
+|
+|赤の反則（▲）
+
+|white_foul
+|BOOLEAN
+|
+|白の反則（▲）
+
+|is_draw
+|BOOLEAN
+|
+|引き分けかどうか
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === team_match_results テーブル
-[cols="1,1,1,2", options="header"]
-|===
-| カラム名           | 型                                         | 制約 | 説明
-| match_id          | BIGINT                                     | FK → tournament_matches.id | 団体戦試合ID
-| position          | VARCHAR(10)                                |      | ポジション（先鋒〜大将）
-| red_player_name   | VARCHAR(50)                                |      | 赤選手名
-| white_player_name | VARCHAR(50)                                |      | 白選手名
-| red_score_1       | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |      | 赤の1本目スコア
-| red_score_2       | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |      | 赤の2本目スコア
-| white_score_1     | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |      | 白の1本目スコア
-| white_score_2     | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |      | 白の2本目スコア
-| red_foul          | BOOLEAN                                    |      | 赤の反則（▲）
-| white_foul        | BOOLEAN                                    |      | 白の反則（▲）
-| is_draw           | BOOLEAN                                    |      | 引き分けかどうか
-| created_at        | DATETIME                                   | DEFAULT CURRENT_TIMESTAMP | 登録日時
-| updated_at        | DATETIME                                   | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
-|===
 
+|===
+|カラム名 |型 |制約 |説明
+
+|match_id
+|BIGINT
+|FK → tournament_matches.id
+|団体戦試合ID
+
+|position
+|VARCHAR(10)
+|
+|ポジション（先鋒〜大将）
+
+|red_player_name
+|VARCHAR(50)
+|
+|赤選手名
+
+|white_player_name
+|VARCHAR(50)
+|
+|白選手名
+
+|red_score_1
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|赤の1本目スコア
+
+|red_score_2
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|赤の2本目スコア
+
+|white_score_1
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|白の1本目スコア
+
+|white_score_2
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|白の2本目スコア
+
+|red_foul
+|BOOLEAN
+|
+|赤の反則（▲）
+
+|white_foul
+|BOOLEAN
+|
+|白の反則（▲）
+
+|is_draw
+|BOOLEAN
+|
+|引き分けかどうか
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
+|===
 
 == 記録管理機能
 
 === personal_match_records テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名          | 型                                         | 制約                            | 説明
-| id               | BIGINT                                     | PK, AUTO_INCREMENT              | 記録ID
-| user_id          | BIGINT                                     | FK → users.id                   | 登録ユーザー
-| tournament_name  | VARCHAR(100)                               | NOT NULL                        | 大会名（自由入力）
-| match_date       | DATE                                       | NOT NULL                        | 試合日
-| round            | VARCHAR(20)                                |                                  | 試合ラウンド
-| red_team         | VARCHAR(100)                               |                                  | 赤選手所属
-| red_player_name  | VARCHAR(50)                                | NOT NULL                        | 赤選手名
-| white_player_name| VARCHAR(50)                                | NOT NULL                        | 白選手名
-| white_team       | VARCHAR(100)                               |                                  | 白選手所属
-| red_score_1      | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |                                  | 赤の1本目スコア
-| red_score_2      | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |                                  | 赤の2本目スコア
-| white_score_1    | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |                                  | 白の1本目スコア
-| white_score_2    | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |                                  | 白の2本目スコア
-| red_foul         | BOOLEAN                                    |                                  | 赤の反則（▲）
-| white_foul       | BOOLEAN                                    |                                  | 白の反則（▲）
-| is_draw          | BOOLEAN                                    |                                  | 引き分け判定
-| visibility       | VARCHAR(20)                                | DEFAULT 'private'               | 公開範囲（private／club）
-| created_at       | DATETIME                                   | DEFAULT CURRENT_TIMESTAMP        | 登録日時
-| updated_at       | DATETIME                                   | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|記録ID
+
+|user_id
+|BIGINT
+|FK → users.id
+|登録ユーザー
+
+|tournament_name
+|VARCHAR(100)
+|NOT NULL
+|大会名（自由入力）
+
+|match_date
+|DATE
+|NOT NULL
+|試合日
+
+|round
+|VARCHAR(20)
+|
+|試合ラウンド
+
+|red_team
+|VARCHAR(100)
+|
+|赤選手所属
+
+|red_player_name
+|VARCHAR(50)
+|NOT NULL
+|赤選手名
+
+|white_player_name
+|VARCHAR(50)
+|NOT NULL
+|白選手名
+
+|white_team
+|VARCHAR(100)
+|
+|白選手所属
+
+|red_score_1
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|赤の1本目スコア
+
+|red_score_2
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|赤の2本目スコア
+
+|white_score_1
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|白の1本目スコア
+
+|white_score_2
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|白の2本目スコア
+
+|red_foul
+|BOOLEAN
+|
+|赤の反則（▲）
+
+|white_foul
+|BOOLEAN
+|
+|白の反則（▲）
+
+|is_draw
+|BOOLEAN
+|
+|引き分け判定
+
+|visibility
+|VARCHAR(20)
+|DEFAULT 'private'
+|公開範囲（private／club）
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === team_match_records テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名         | 型            | 制約                            | 説明
-| id              | BIGINT        | PK, AUTO_INCREMENT              | 記録ID
-| user_id         | BIGINT        | FK → users.id                   | 登録ユーザー
-| tournament_name | VARCHAR(100)  | NOT NULL                        | 大会名
-| match_date      | DATE          | NOT NULL                        | 試合日
-| round           | VARCHAR(20)   |                                  | ラウンド
-| red_team        | VARCHAR(100)  | NOT NULL                         | 赤チーム名
-| white_team      | VARCHAR(100)  | NOT NULL                         | 白チーム名
-| visibility      | VARCHAR(20)   | DEFAULT 'private'               | 公開範囲
-| created_at      | DATETIME      | DEFAULT CURRENT_TIMESTAMP        | 登録日時
-| updated_at      | DATETIME      | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|記録ID
+
+|user_id
+|BIGINT
+|FK → users.id
+|登録ユーザー
+
+|tournament_name
+|VARCHAR(100)
+|NOT NULL
+|大会名
+
+|match_date
+|DATE
+|NOT NULL
+|試合日
+
+|round
+|VARCHAR(20)
+|
+|ラウンド
+
+|red_team
+|VARCHAR(100)
+|NOT NULL
+|赤チーム名
+
+|white_team
+|VARCHAR(100)
+|NOT NULL
+|白チーム名
+
+|visibility
+|VARCHAR(20)
+|DEFAULT 'private'
+|公開範囲
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
 === team_match_record_details テーブル
-[cols="1,1,1,2", options="header"]
+
 |===
-| カラム名           | 型                                         | 制約                            | 説明
-| record_id         | BIGINT                                     | FK → team_match_records.id      | 団体戦記録ID
-| position          | VARCHAR(10)                                | NOT NULL                         | 先鋒〜大将
-| red_player_name   | VARCHAR(50)                                |                                  | 赤選手名
-| white_player_name | VARCHAR(50)                                |                                  | 白選手名
-| red_score_1       | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |                                  | 赤の1本目スコア
-| red_score_2       | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |                                  | 赤の2本目スコア
-| white_score_1     | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |                                  | 白の1本目スコア
-| white_score_2     | ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')   |                                  | 白の2本目スコア
-| red_foul          | BOOLEAN                                    |                                  | 赤の反則（▲）
-| white_foul        | BOOLEAN                                    |                                  | 白の反則（▲）
-| is_draw           | BOOLEAN                                    |                                  | 引き分け判定
-| created_at        | DATETIME                                   | DEFAULT CURRENT_TIMESTAMP        | 登録日時
-| updated_at        | DATETIME                                   | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|record_id
+|BIGINT
+|FK → team_match_records.id
+|団体戦記録ID
+
+|position
+|VARCHAR(10)
+|NOT NULL
+|先鋒〜大将
+
+|red_player_name
+|VARCHAR(50)
+|
+|赤選手名
+
+|white_player_name
+|VARCHAR(50)
+|
+|白選手名
+
+|red_score_1
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|赤の1本目スコア
+
+|red_score_2
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|赤の2本目スコア
+
+|white_score_1
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|白の1本目スコア
+
+|white_score_2
+|ENUM('メ', 'コ', 'ド', 'ツ', '反', '不')
+|
+|白の2本目スコア
+
+|red_foul
+|BOOLEAN
+|
+|赤の反則（▲）
+
+|white_foul
+|BOOLEAN
+|
+|白の反則（▲）
+
+|is_draw
+|BOOLEAN
+|
+|引き分け判定
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
-= 記録管理機能：団体戦テンプレート管理用テーブル定義
+== 団体戦テンプレート管理機能
 
-== team_templates テーブル
-[cols="1,1,1,2", options="header"]
+=== team_templates テーブル
+
 |===
-| カラム名       | 型            | 制約                              | 説明
-| id            | BIGINT        | PK, AUTO_INCREMENT                | テンプレートID
-| club_id       | BIGINT        | FK → clubs.id                     | 所属クラブID（テンプレートの所属）
-| name          | VARCHAR(100)  | NOT NULL                          | テンプレート名（例：レギュラーチーム）
-| created_by    | BIGINT        | FK → users.id                     | 登録ユーザーID
-| created_at    | DATETIME      | DEFAULT CURRENT_TIMESTAMP         | 登録日時
-| updated_at    | DATETIME      | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|テンプレートID
+
+|club_id
+|BIGINT
+|FK → clubs.id
+|所属クラブID（テンプレートの所属）
+
+|name
+|VARCHAR(100)
+|NOT NULL
+|テンプレート名（例：レギュラーチーム）
+
+|created_by
+|BIGINT
+|FK → users.id
+|登録ユーザーID
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
 
-== team_template_members テーブル
-[cols="1,1,1,2", options="header"]
+=== team_template_members テーブル
+
 |===
-| カラム名         | 型            | 制約                                | 説明
-| template_id     | BIGINT        | FK → team_templates.id              | 所属テンプレートID
-| position        | ENUM('先鋒','次鋒','中堅','副将','大将','補欠1','補欠2') | NOT NULL | ポジション
-| player_name     | VARCHAR(50)   | NOT NULL                            | 選手名
-| created_at      | DATETIME      | DEFAULT CURRENT_TIMESTAMP           | 登録日時
-| updated_at      | DATETIME      | DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP | 更新日時
+|カラム名 |型 |制約 |説明
+
+|template_id
+|BIGINT
+|FK → team_templates.id
+|所属テンプレートID
+
+|position
+|ENUM('先鋒','次鋒','中堅','副将','大将','補欠1','補欠2')
+|NOT NULL
+|ポジション
+
+|player_name
+|VARCHAR(50)
+|NOT NULL
+|選手名
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
 |===
