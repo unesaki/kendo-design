@@ -1,0 +1,392 @@
+= テンプレート登録API 詳細設計書
+
+== 概要
+
+createTeamTemplateApi
+
+団体戦の選手テンプレートをクラブ単位で新規登録するAPI。  
+テンプレート名とポジションごとの選手名を受け取り、テンプレート情報と構成メンバーをそれぞれのテーブルに登録する。
+
+== Bean定義
+
+=== Entity定義
+
+==== TeamTemplateEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|テンプレートID（自動採番）
+
+|clubId
+|Long
+|所属クラブID
+
+|name
+|String
+|テンプレート名
+
+|createdBy
+|Long
+|登録ユーザーID
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+==== TeamTemplateMemberEntity
+
+|===
+|フィールド名 |型 |説明
+
+|templateId
+|Long
+|テンプレートID（TeamTemplateEntity.id）
+
+|position
+|String
+|ポジション（先鋒〜補欠2）
+
+|playerName
+|String
+|選手名
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== Dto定義
+
+==== TeamTemplateRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|clubId
+|Long
+|@NotNull
+|所属クラブID
+
+|name
+|String
+|@NotBlank
+|テンプレート名
+
+|members
+|List<MemberDto>
+|@Valid
+|メンバーリスト
+|===
+
+===== MemberDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|position
+|String
+|@NotBlank
+|ポジション（例：先鋒）
+
+|playerName
+|String
+|@NotBlank
+|選手名
+|===
+
+==== TeamTemplateResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|テンプレートID
+
+|name
+|String
+|テンプレート名
+
+|clubId
+|Long
+|所属クラブID
+
+|createdBy
+|Long
+|登録ユーザーID
+
+|members
+|List<MemberDto>
+|登録されたメンバー情報
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|nameが空の場合
+|テンプレート名は必須です。
+|MSG_TMP_0001
+|400
+
+|2
+|clubIdがnullの場合
+|入力データが不正です。
+|MSG_SYS_0005
+|400
+
+|3
+|membersの要素が空の場合
+|入力データが不正です。
+|MSG_SYS_0005
+|400
+
+|4
+|membersのpositionが空の場合
+|ポジションが重複しています。
+|MSG_TMP_0003
+|400
+
+|5
+|membersのplayerNameが空の場合
+|選手名は必須です。
+|MSG_REC_0001
+|400
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TeamTemplateController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamTemplateService
+|TeamTemplateService
+|テンプレート登録処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/team-templates"), @RequiredArgsConstructor
+
+|メソッド
+|@PostMapping
+
+|引数
+|@RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`createTemplate`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<TeamTemplateResponseDto>
+|登録成功時にテンプレート情報を返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|クライアントから送信されたテンプレート名、クラブID、メンバー情報（最大7件）を DTO（TeamTemplateRequestDto）として受け取る。
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーの ID（userId）を取得する。
+
+|3
+|サービス呼び出し
+|`teamTemplateService.createTemplate(requestDto, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `TeamTemplateResponseDto` を `ResponseEntity.status(HttpStatus.CREATED).body(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* バリデーションエラーが発生した場合は `MSG_SYS_0005` を返す  
+* 認証情報が取得できない場合は `MSG_SYS_0008` または `MSG_SYS_0009` を返す  
+* Service層からスローされた例外に応じて適切なメッセージIDを返す
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TeamTemplateService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|createTemplate
+|TeamTemplateRequestDto, Long userId
+|TeamTemplateResponseDto
+|テンプレートとメンバーを登録し、登録情報を返す。
+|===
+
+=== 実装クラス
+
+`TeamTemplateServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamTemplateRepository
+|TeamTemplateRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor
+|===
+
+=== パラメータ
+
+|===
+|名称 |型 |説明
+
+|requestDto
+|TeamTemplateRequestDto
+|テンプレート登録リクエスト情報
+
+|userId
+|Long
+|認証ユーザーID
+|===
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|TeamTemplateResponseDto
+|登録されたテンプレート情報を含むDTO
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|エンティティの生成
+|DTOから `TeamTemplateEntity` を生成。  
+* name, clubId, createdBy に値をセット  
+* createdAt, updatedAt に現在日時を設定
+
+|2
+|テンプレートの登録
+|`teamTemplateRepository.insertTemplate(entity)` を呼び出し、テンプレートをDBに登録。  
+* 自動採番されたIDが `entity.id` に格納される  
+* 登録失敗時は `RuntimeException` をスロー  
+* 共通エラー `MSG_SYS_0003`, `MSG_SYS_0010`
+
+|3
+|ポジションチェック
+|* `members` の position 重複を検証し、重複があれば `BusinessException` をスロー → `MSG_TMP_0003`  
+* 補欠ポジションが3人以上ある場合、`BusinessException` をスロー → `MSG_REC_0004`
+
+|4
+|メンバーの登録
+|* 各 `MemberDto` から `TeamTemplateMemberEntity` を生成し、テンプレートIDを設定  
+* 登録に `teamTemplateRepository.insertMember(member)` を使用  
+* 登録失敗時は `RuntimeException` → `MSG_SYS_0003`, `MSG_SYS_0010`
+
+|5
+|レスポンス生成
+|* 登録したテンプレート情報とメンバーを DTO に詰めて返却する
+
+|–
+|エラー処理
+|* `BusinessException` や `RuntimeException` をスローし、エラーメッセージを返す  
+* 詳細は「エラーメッセージ一覧」を参照する
+|===
+
+== Repository定義
+
+=== インターフェース名
+
+`TeamTemplateRepository`
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== パラメータ・戻り値
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|insertTemplate
+|TeamTemplateEntity
+|void
+|テンプレートを `team_templates` テーブルに登録
+
+|insertMember
+|TeamTemplateMemberEntity
+|void
+|メンバーを `team_template_members` に登録
+|===
+
+=== 使用クエリ（MyBatis）
+
+[source,sql]
+----
+INSERT INTO team_templates (
+  club_id, name, created_by, created_at, updated_at
+) VALUES (
+  #{clubId}, #{name}, #{createdBy}, #{createdAt}, #{updatedAt}
+);
+----
+
+[source,sql]
+----
+INSERT INTO team_template_members (
+  template_id, position, player_name, created_at, updated_at
+) VALUES (
+  #{templateId}, #{position}, #{playerName}, #{createdAt}, #{updatedAt}
+);
+----

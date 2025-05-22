@@ -1,0 +1,305 @@
+= テンプレート詳細取得API 詳細設計書
+
+== 概要
+
+getTeamTemplateDetailApi
+
+指定されたテンプレートIDに基づき、団体戦テンプレートの情報（テンプレート名、クラブID、作成者、構成メンバー）を取得するAPI。  
+テンプレートが存在しない場合はエラーを返却する。
+
+== Bean定義
+
+=== Entity定義
+
+==== TeamTemplateEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|テンプレートID
+
+|clubId
+|Long
+|所属クラブID
+
+|name
+|String
+|テンプレート名
+
+|createdBy
+|Long
+|作成ユーザーID
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+==== TeamTemplateMemberEntity
+
+|===
+|フィールド名 |型 |説明
+
+|templateId
+|Long
+|テンプレートID
+
+|position
+|String
+|ポジション（先鋒〜補欠2）
+
+|playerName
+|String
+|選手名
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== Dto定義
+
+==== TeamTemplateResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|テンプレートID
+
+|name
+|String
+|テンプレート名
+
+|clubId
+|Long
+|所属クラブID
+
+|createdBy
+|Long
+|作成ユーザーID
+
+|members
+|List<MemberDto>
+|構成メンバーリスト
+|===
+
+===== MemberDto
+
+|===
+|フィールド名 |型 |説明
+
+|position
+|String
+|ポジション
+
+|playerName
+|String
+|選手名
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TeamTemplateController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamTemplateService
+|TeamTemplateService
+|テンプレート取得処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/team-templates"), @RequiredArgsConstructor
+
+|メソッド
+|@GetMapping("/{id}")
+
+|引数
+|@PathVariable
+|===
+
+=== メソッド名
+
+`getTemplateDetail`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<TeamTemplateResponseDto>
+|テンプレートの詳細を返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|テンプレートIDの取得
+|パス変数からテンプレートID（Long）を受け取る。
+
+|2
+|サービス呼び出し
+|`teamTemplateService.getTemplateDetail(id)` を呼び出す。
+
+|3
+|レスポンス生成
+|取得結果を `ResponseEntity.ok(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* テンプレートが存在しない場合は `MSG_TMP_0002` を返す  
+* DBエラーが発生した場合は `MSG_SYS_0003` または `MSG_SYS_0010` を返す
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TeamTemplateService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|getTemplateDetail
+|Long id
+|TeamTemplateResponseDto
+|テンプレートとその構成メンバーを返却
+|===
+
+=== 実装クラス
+
+`TeamTemplateServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamTemplateRepository
+|TeamTemplateRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor
+|===
+
+=== パラメータ
+
+|===
+|名称 |型 |説明
+
+|id
+|Long
+|テンプレートID
+|===
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|TeamTemplateResponseDto
+|テンプレート情報を含むDTO
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|テンプレート取得
+|* `teamTemplateRepository.selectById(id)` を呼び出してテンプレート情報を取得  
+* 存在しない場合は `BusinessException` → `MSG_TMP_0002`
+
+|2
+|構成メンバー取得
+|* `teamTemplateRepository.selectMembersByTemplateId(id)` を呼び出して構成メンバーを取得
+
+|3
+|DTO変換
+|* テンプレート情報および構成メンバーを `TeamTemplateResponseDto` に詰めて返却する
+
+|–
+|エラー処理
+|* テンプレートが存在しない場合は `BusinessException` をスロー  
+* DB操作に失敗した場合は `RuntimeException` をスローし、`MSG_SYS_0003` または `MSG_SYS_0010` を返す
+|===
+
+== Repository定義
+
+=== インターフェース名
+
+`TeamTemplateRepository`
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== パラメータ・戻り値
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|selectById
+|Long id
+|TeamTemplateEntity
+|テンプレート情報を取得
+
+|selectMembersByTemplateId
+|Long templateId
+|List<TeamTemplateMemberEntity>
+|構成メンバー情報を取得
+|===
+
+=== 使用クエリ（MyBatis）
+
+[source,sql]
+----
+-- selectById
+SELECT * FROM team_templates WHERE id = #{id};
+----
+
+[source,sql]
+----
+-- selectMembersByTemplateId
+SELECT * FROM team_template_members
+WHERE template_id = #{templateId}
+ORDER BY position;
+----

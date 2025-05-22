@@ -1,0 +1,257 @@
+= テンプレート削除API 詳細設計書
+
+== 概要
+
+deleteTeamTemplateApi
+
+指定されたテンプレートIDに対応する団体戦テンプレートとその構成メンバーを削除するAPI。  
+テンプレートが存在する場合にのみ削除を行い、構成メンバー情報も全て一括で削除される。
+
+== Bean定義
+
+=== Entity定義
+
+==== TeamTemplateEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|テンプレートID
+
+|clubId
+|Long
+|所属クラブID
+
+|name
+|String
+|テンプレート名
+
+|createdBy
+|Long
+|作成ユーザーID
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TeamTemplateController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamTemplateService
+|TeamTemplateService
+|テンプレート削除処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/team-templates"), @RequiredArgsConstructor
+
+|メソッド
+|@DeleteMapping("/{id}")
+
+|引数
+|@PathVariable, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`deleteTemplate`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<Void>
+|削除成功時はステータス204を返却（本文なし）
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|テンプレートIDの取得
+|パス変数としてテンプレートID（Long）を受け取る。
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーIDを取得する。
+
+|3
+|サービス呼び出し
+|`teamTemplateService.deleteTemplate(id, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|`ResponseEntity.noContent().build()` を返却する。
+
+|–
+|エラー処理
+|* テンプレートが存在しない場合は `MSG_TMP_0002` を返す  
+* 認証情報が取得できない場合は `MSG_SYS_0008` または `MSG_SYS_0009` を返す  
+* DBエラー発生時は `MSG_SYS_0003` または `MSG_SYS_0010` を返す
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TeamTemplateService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|deleteTemplate
+|Long id, Long userId
+|void
+|テンプレートと構成メンバーを削除する
+|===
+
+=== 実装クラス
+
+`TeamTemplateServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamTemplateRepository
+|TeamTemplateRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor
+|===
+
+=== パラメータ
+
+|===
+|名称 |型 |説明
+
+|id
+|Long
+|削除対象のテンプレートID
+
+|userId
+|Long
+|認証ユーザーID
+|===
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|void
+|本文なし（204 No Content）
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|テンプレートの存在確認
+|* `teamTemplateRepository.selectById(id)` を呼び出し、テンプレートの存在を確認する  
+* 存在しない場合は `BusinessException` をスロー → `MSG_TMP_0002`
+
+|2
+|構成メンバーの削除
+|* `teamTemplateRepository.deleteMembersByTemplateId(id)` を呼び出し、構成メンバーを全削除  
+* 削除失敗時は `RuntimeException` をスロー → `MSG_SYS_0003`, `MSG_SYS_0010`
+
+|3
+|テンプレートの削除
+|* `teamTemplateRepository.deleteTemplateById(id)` を呼び出してテンプレートを削除  
+* 削除失敗時は `RuntimeException` をスロー
+
+|–
+|エラー処理
+|* テンプレートが存在しない場合は `BusinessException` → `MSG_TMP_0002`  
+* DBアクセス失敗時は `RuntimeException` → `MSG_SYS_0003` または `MSG_SYS_0010`
+|===
+
+== Repository定義
+
+=== インターフェース名
+
+`TeamTemplateRepository`
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== パラメータ・戻り値
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|selectById
+|Long id
+|TeamTemplateEntity
+|テンプレートを1件取得
+
+|deleteMembersByTemplateId
+|Long templateId
+|void
+|指定テンプレートの構成メンバーを全削除
+
+|deleteTemplateById
+|Long id
+|void
+|テンプレート本体を削除
+|===
+
+=== 使用クエリ（MyBatis）
+
+[source,sql]
+----
+-- selectById
+SELECT * FROM team_templates WHERE id = #{id};
+----
+
+[source,sql]
+----
+-- deleteMembersByTemplateId
+DELETE FROM team_template_members WHERE template_id = #{templateId};
+----
+
+[source,sql]
+----
+-- deleteTemplateById
+DELETE FROM team_templates WHERE id = #{id};
+----

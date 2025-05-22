@@ -1,0 +1,245 @@
+= テンプレート一覧取得API 詳細設計書
+
+
+== 概要
+
+fetchTeamTemplateApi
+
+所属クラブに紐づくすべての団体戦テンプレートの一覧を取得するAPI。  
+テンプレート名や作成者情報、登録日時を含んだ簡易情報を複数件まとめて返却する。
+
+== Bean定義
+
+=== Entity定義
+
+==== TeamTemplateEntity
+
+|===
+|フィールド名 |型 |説明
+|id 
+|Long 
+|テンプレートID
+
+|clubId 
+|Long 
+|所属クラブID
+
+|name 
+|String 
+|テンプレート名
+
+|createdBy 
+|Long 
+|作成ユーザーID
+
+|createdAt 
+|LocalDateTime 
+|登録日時
+
+|updatedAt 
+|LocalDateTime 
+|更新日時
+|===
+
+=== Dto定義
+
+==== TeamTemplateListResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|id 
+|Long 
+|テンプレートID
+
+|name 
+|String 
+|テンプレート名
+
+|createdBy 
+|Long 
+|作成ユーザーID
+
+|createdAt 
+|LocalDateTime 
+|登録日時
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TeamTemplateController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamTemplateService 
+|TeamTemplateService 
+|テンプレート一覧取得処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/team-templates"), @RequiredArgsConstructor
+
+|メソッド 
+|@GetMapping
+
+|引数 
+|@AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`getTemplateList`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<List<TeamTemplateListResponseDto>> 
+|テンプレート一覧を返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1 
+|ユーザー情報の取得 
+| `@AuthenticationPrincipal` により、ログインユーザーからクラブIDを取得する。
+
+|2 
+|サービス呼び出し 
+| `teamTemplateService.getTemplateList(clubId)` を呼び出す。
+
+|3 
+|レスポンス生成 
+|戻り値を `ResponseEntity.ok(...)` にラップして返却する。
+
+|– 
+|エラー処理 
+|* 認証情報が取得できない場合は `MSG_SYS_0008` または `MSG_SYS_0009` を返す  
+* DBアクセスエラーが発生した場合は `MSG_SYS_0003` または `MSG_SYS_0010` を返す
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TeamTemplateService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|getTemplateList 
+|Long clubId 
+|List<TeamTemplateListResponseDto> 
+|所属クラブのテンプレート一覧を返却
+|===
+
+=== 実装クラス
+
+`TeamTemplateServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamTemplateRepository 
+|TeamTemplateRepository 
+| `@RequiredArgsConstructor` によりインジェクションされる
+|===
+
+=== アノテーション
+
+|===
+| 対象 |アノテーション
+
+|クラス 
+|@Service, @RequiredArgsConstructor
+|===
+
+=== パラメータ
+
+|===
+|名称 |型 |説明
+
+|clubId 
+|Long 
+|所属クラブID
+|===
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|List<TeamTemplateListResponseDto> 
+|テンプレート情報リスト
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1 
+|Repository呼び出し 
+| `teamTemplateRepository.selectByClubId(clubId)` を呼び出し、所属クラブのテンプレート一覧を取得する。
+
+|2 
+|DTO変換 
+|* 取得した `List<TeamTemplateEntity>` をループし、各エンティティを `TeamTemplateListResponseDto` に変換  
+* name, id, createdBy, createdAt をそれぞれセット
+
+|– 
+|エラー処理 
+|DBアクセス失敗時は `RuntimeException` をスローし、`MSG_SYS_0003` または `MSG_SYS_0010` を返す
+|===
+
+== Repository定義
+
+=== インターフェース名
+
+`TeamTemplateRepository`
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス 
+|@Mapper
+|===
+
+=== パラメータ・戻り値
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|selectByClubId 
+|Long clubId 
+|List<TeamTemplateEntity> 
+|クラブIDに紐づくテンプレート一覧を取得
+|===
+
+=== 使用クエリ（MyBatis）
+
+[source,sql]
+----
+SELECT id, name, created_by, created_at
+FROM team_templates
+WHERE club_id = #{clubId}
+ORDER BY created_at DESC;
+----

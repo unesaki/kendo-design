@@ -1,0 +1,381 @@
+= テンプレート更新API 詳細設計書
+
+== 概要
+
+updateTeamTemplateApi
+
+既存の団体戦テンプレートの情報（テンプレート名および選手構成）を更新するAPI。  
+対象テンプレートIDを指定し、テンプレート名やポジションごとの選手名を差し替える。
+
+== Bean定義
+
+=== Entity定義
+
+==== TeamTemplateEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|テンプレートID
+
+|clubId
+|Long
+|所属クラブID
+
+|name
+|String
+|テンプレート名
+
+|createdBy
+|Long
+|作成ユーザーID
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+==== TeamTemplateMemberEntity
+
+|===
+|フィールド名 |型 |説明
+
+|templateId
+|Long
+|テンプレートID（TeamTemplateEntity.id）
+
+|position
+|String
+|ポジション（先鋒〜補欠2）
+
+|playerName
+|String
+|選手名
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== Dto定義
+
+==== TeamTemplateUpdateRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|name
+|String
+|@NotBlank
+|テンプレート名
+
+|members
+|List<MemberDto>
+|@Valid
+|メンバー構成（最大7件）
+|===
+
+===== MemberDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|position
+|String
+|@NotBlank
+|ポジション（例：先鋒）
+
+|playerName
+|String
+|@NotBlank
+|選手名
+|===
+
+==== TeamTemplateResponseDto
+
+（テンプレート登録APIと共通）
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|nameが空の場合
+|テンプレート名は必須です。
+|MSG_TMP_0001
+|400
+
+|2
+|membersのpositionが空の場合
+|ポジションが重複しています。
+|MSG_TMP_0003
+|400
+
+|3
+|membersのplayerNameが空の場合
+|選手名は必須です。
+|MSG_REC_0001
+|400
+
+|4
+|membersの補欠が3人以上の場合
+|補欠は2人までです。
+|MSG_REC_0004
+|400
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TeamTemplateController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamTemplateService
+|TeamTemplateService
+|テンプレート更新処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/team-templates"), @RequiredArgsConstructor
+
+|メソッド
+|@PutMapping("/{id}")
+
+|引数
+|@PathVariable, @RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`updateTemplate`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<TeamTemplateResponseDto>
+|更新後のテンプレート情報を返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|パス変数でテンプレートIDを、リクエストボディで更新情報を受け取る。
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーID（userId）を取得する。
+
+|3
+|サービス呼び出し
+|`teamTemplateService.updateTemplate(id, requestDto, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値を `ResponseEntity.ok(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* テンプレートが存在しない場合は `MSG_TMP_0002` を返す  
+* バリデーションエラーが発生した場合は `MSG_TMP_0001` 等を返す  
+* 認証情報が取得できない場合は `MSG_SYS_0008` または `MSG_SYS_0009` を返す
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TeamTemplateService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|updateTemplate
+|Long id, TeamTemplateUpdateRequestDto requestDto, Long userId
+|TeamTemplateResponseDto
+|テンプレート情報および構成メンバーを更新し、結果を返却
+|===
+
+=== 実装クラス
+
+`TeamTemplateServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamTemplateRepository
+|TeamTemplateRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor
+|===
+
+=== パラメータ
+
+|===
+|名称 |型 |説明
+
+|id
+|Long
+|更新対象のテンプレートID
+
+|requestDto
+|TeamTemplateUpdateRequestDto
+|更新内容
+
+|userId
+|Long
+|認証ユーザーID
+|===
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|TeamTemplateResponseDto
+|更新後のテンプレート情報
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|テンプレートの存在確認
+|* `teamTemplateRepository.selectById(id)` を呼び出して存在を確認  
+* 存在しない場合は `BusinessException` → `MSG_TMP_0002`
+
+|2
+|ポジションチェック
+|* 重複ポジションがないか検証 → 重複時 `MSG_TMP_0003`  
+* 補欠が3人以上ある場合 → `MSG_REC_0004`
+
+|3
+|テンプレートの更新
+|* name, updatedAt を設定し、`teamTemplateRepository.updateTemplate(entity)` を呼び出す  
+* 更新失敗時は `RuntimeException` → `MSG_SYS_0003`
+
+|4
+|構成メンバーの入れ替え
+|* `teamTemplateRepository.deleteMembersByTemplateId(id)` で既存メンバーを削除  
+* 各 `MemberDto` をエンティティに変換し、`insertMember` で登録
+
+|5
+|レスポンス生成
+|* テンプレート情報とメンバーを `TeamTemplateResponseDto` に変換して返却
+
+|–
+|エラー処理
+|* 該当テンプレートが存在しない場合は `BusinessException` をスローし `MSG_TMP_0002` を返す  
+* DB操作失敗時は `RuntimeException` をスローし `MSG_SYS_0003` または `MSG_SYS_0010` を返す
+|===
+
+== Repository定義
+
+=== インターフェース名
+
+`TeamTemplateRepository`
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== パラメータ・戻り値
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|selectById
+|Long id
+|TeamTemplateEntity
+|テンプレート1件取得
+
+|updateTemplate
+|TeamTemplateEntity
+|void
+|テンプレート情報を更新
+
+|deleteMembersByTemplateId
+|Long templateId
+|void
+|既存の構成メンバーを削除
+
+|insertMember
+|TeamTemplateMemberEntity
+|void
+|構成メンバーを追加
+|===
+
+=== 使用クエリ（MyBatis）
+
+[source,sql]
+----
+-- selectById
+SELECT * FROM team_templates WHERE id = #{id};
+----
+
+[source,sql]
+----
+-- updateTemplate
+UPDATE team_templates
+SET name = #{name}, updated_at = #{updatedAt}
+WHERE id = #{id};
+----
+
+[source,sql]
+----
+-- deleteMembersByTemplateId
+DELETE FROM team_template_members WHERE template_id = #{templateId};
+----
+
+[source,sql]
+----
+-- insertMember
+INSERT INTO team_template_members (
+  template_id, position, player_name, created_at, updated_at
+) VALUES (
+  #{templateId}, #{position}, #{playerName}, #{createdAt}, #{updatedAt}
+);
+----
