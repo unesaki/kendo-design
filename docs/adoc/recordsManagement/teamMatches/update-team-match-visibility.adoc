@@ -1,0 +1,202 @@
+= 団体戦記録 公開範囲更新API 詳細設計書
+
+== 概要
+
+updateTeamMatchVisibilityApi
+
+既存の団体戦記録に対して、公開範囲（visibility）のみを変更するAPI。  
+他の項目は一切更新されず、部分更新（PATCH）として実行される。
+
+== Bean定義
+
+=== Dto定義
+
+==== TeamMatchVisibilityUpdateRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|visibility
+|String
+|@NotBlank, @Pattern(regexp = "^(PRIVATE|CLUB)$")
+|公開範囲（PRIVATE: 自分のみ、CLUB: 所属クラブ）
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|visibilityが空または不正な値
+|公開範囲が不正です。
+|MSG_REC_0008
+|400
+
+|2
+|記録IDが存在しない、またはユーザーが作成者でない
+|対象の団体戦記録が存在しません。
+|MSG_REC_0007
+|404
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TeamMatchRecordController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamMatchRecordService
+|TeamMatchRecordService
+|団体戦記録更新処理を行うサービス
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/records/team"), @RequiredArgsConstructor
+
+|メソッド
+|@PatchMapping("/{id}/visibility")
+
+|引数
+|@PathVariable, @RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`updateVisibility`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<Void>
+|更新成功時はHTTP 200（OK）を返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|ログインユーザーの取得
+|* `@AuthenticationPrincipal` で userId を取得する
+
+|2
+|サービス呼び出し
+|* teamMatchRecordService.updateVisibility(id, requestDto, userId) を呼び出す
+
+|3
+|レスポンス返却
+|* ResponseEntity.ok().build() を返却
+
+|–
+|エラー処理
+|* バリデーションエラー → MSG_REC_0008  
+* 記録が存在しない、または本人でない → MSG_REC_0007  
+* その他例外 → MSG_SYS_0003
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TeamMatchRecordService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|updateVisibility
+|Long id, TeamMatchVisibilityUpdateRequestDto requestDto, Long userId
+|void
+|対象団体戦記録の公開範囲を更新する
+|===
+
+=== 実装クラス
+
+`TeamMatchRecordServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamMatchRecordRepository
+|TeamMatchRecordRepository
+|団体戦記録用リポジトリ
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|記録の存在確認
+|* teamMatchRecordRepository.existsByIdAndUserId(id, userId) を呼び出す  
+* 該当しない場合は BusinessException → MSG_REC_0007 をスロー
+
+|2
+|公開範囲の更新
+|* teamMatchRecordRepository.updateVisibility(id, requestDto.getVisibility()) を呼び出す  
+* visibility の値が不正でないことは事前にバリデーションで保証される  
+* 更新失敗時は RuntimeException をスロー
+|===
+
+== Repository定義
+
+=== インターフェース名
+
+`TeamMatchRecordRepository`
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== パラメータ・戻り値
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|existsByIdAndUserId
+|Long id, Long userId
+|boolean
+|ログインユーザーが作成した記録かを確認
+
+|updateVisibility
+|Long id, String visibility
+|void
+|対象の団体戦記録の公開範囲を更新する
+|===
+
+=== 使用クエリ（MyBatis）
+
+[source,sql]
+----
+SELECT COUNT(*) > 0
+FROM team_matches
+WHERE id = #{id} AND user_id = #{userId};
+----
+
+[source,sql]
+----
+UPDATE team_matches
+SET visibility = #{visibility}, updated_at = NOW()
+WHERE id = #{id};
+----

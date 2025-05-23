@@ -1,0 +1,224 @@
+= 団体戦記録 更新・削除依頼ステータス更新API 詳細設計書
+
+== 概要
+
+updateRecordEditRequestStatusApi
+
+ログインユーザーが作成した団体戦記録に対する依頼に対して、`ACCEPTED` または `REJECTED` のステータスを設定するAPI。
+
+== Bean定義
+
+=== Dto定義
+
+==== RecordEditRequestStatusUpdateDto
+
+[cols="1,1,1,2", options="header"]
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|status
+|String
+|@Pattern(regexp = "^(ACCEPTED|REJECTED)$")
+|更新後のステータス（ACCEPTEDまたはREJECTED）
+|===
+
+=== バリデーションエラー一覧
+
+[cols="1,1,1,1,1", options="header"]
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|statusが不正
+|ステータスが不正です。
+|MSG_REQ_0003
+|400
+
+|2
+|ログインユーザーが対象記録の作成者でない
+|ステータスを変更する権限がありません。
+|MSG_REQ_0004
+|403
+
+|3
+|依頼IDが存在しない
+|指定された依頼が存在しません。
+|MSG_REQ_0005
+|404
+|===
+
+== Controller定義
+
+=== クラス名
+
+`RecordEditRequestController`
+
+=== フィールド
+
+[cols="1,1,2", options="header"]
+|===
+|名称 |型 |説明
+
+|recordEditRequestService
+|RecordEditRequestService
+|依頼ステータス更新サービス
+|===
+
+=== アノテーション
+
+[cols="1,1", options="header"]
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/records/team/requests"), @RequiredArgsConstructor
+
+|メソッド
+|@PatchMapping("/{id}/status")
+
+|引数
+|@PathVariable, @RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`updateStatus`
+
+=== 戻り値
+
+[cols="1,1", options="header"]
+|===
+|戻り値型 |説明
+
+|ResponseEntity<Void>
+|更新成功時はHTTP 200を返却
+|===
+
+=== 処理詳細
+
+[cols="1,1,2", options="header"]
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|* RecordEditRequestStatusUpdateDto を受け取る
+
+|2
+|ログインユーザーの取得
+|* @AuthenticationPrincipal により userId を取得
+
+|3
+|サービス呼び出し
+|* recordEditRequestService.updateStatus(id, requestDto, userId) を実行する
+
+|4
+|レスポンス返却
+|* ResponseEntity.ok().build() を返却
+|===
+
+== Service定義
+
+=== インターフェース
+
+`RecordEditRequestService`
+
+[cols="1,1,1,2", options="header"]
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|updateStatus
+|Long id, RecordEditRequestStatusUpdateDto requestDto, Long userId
+|void
+|依頼ステータスを更新する
+|===
+
+=== 実装クラス
+
+`RecordEditRequestServiceImpl`
+
+=== フィールド
+
+[cols="1,1,2", options="header"]
+|===
+|名称 |型 |説明
+
+|recordEditRequestRepository
+|RecordEditRequestRepository
+|依頼データアクセス用リポジトリ
+|===
+
+=== 処理詳細
+
+[cols="1,1,2", options="header"]
+|===
+|順序 |概要 |詳細
+
+|1
+|対象依頼の取得と検証
+|* recordEditRequestRepository.selectWithMatchInfo(id) を呼び出し、依頼と対象記録の作成者IDを取得  
+* 該当依頼が存在しない場合は BusinessException → MSG_REQ_0005  
+* ログインユーザーが作成者でない場合は BusinessException → MSG_REQ_0004
+
+|2
+|ステータス更新
+|* recordEditRequestRepository.updateStatus(id, requestDto.getStatus()) を呼び出す  
+* 更新失敗時は RuntimeException をスロー
+
+|3
+|完了
+|* 正常終了（ResponseEntity.ok）を返却
+|===
+
+== Repository定義
+
+=== インターフェース名
+
+`RecordEditRequestRepository`
+
+=== アノテーション
+
+[cols="1,1", options="header"]
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== メソッド定義
+
+[cols="1,1,1,2", options="header"]
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|selectWithMatchInfo
+|Long id
+|RecordEditRequestWithMatchEntity
+|依頼情報と対象記録の作成者IDを取得する（JOIN付）
+
+|updateStatus
+|Long id, String status
+|void
+|依頼ステータスを更新する
+|===
+
+=== 使用クエリ（MyBatis）
+
+[source,sql]
+----
+SELECT
+  r.id,
+  r.record_id,
+  m.user_id AS match_owner_id
+FROM record_edit_requests r
+JOIN team_matches m ON r.record_id = m.id
+WHERE r.id = #{id};
+----
+
+[source,sql]
+----
+UPDATE record_edit_requests
+SET status = #{status}, updated_at = NOW()
+WHERE id = #{id};
+----

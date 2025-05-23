@@ -1,0 +1,212 @@
+= 団体戦記録 更新・削除依頼一覧取得API 詳細設計書
+
+== 概要
+
+fetchRecordEditRequestListApi
+
+ログインユーザーが作成した団体戦記録に対して送られた更新・削除依頼を一覧で取得するAPI。
+
+== Bean定義
+
+=== Dto定義
+
+==== RecordEditRequestResponseDto
+
+[cols="1,1,2", options="header"]
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|依頼ID
+
+|recordId
+|Long
+|対象団体戦記録ID
+
+|tournamentName
+|String
+|大会名
+
+|requestType
+|String
+|依頼種別（UPDATE, DELETE）
+
+|reason
+|String
+|依頼理由
+
+|requesterName
+|String
+|依頼者名
+
+|status
+|String
+|依頼ステータス（PENDING, ACCEPTED, REJECTED）
+
+|createdAt
+|LocalDateTime
+|依頼日時
+|===
+
+== Controller定義
+
+=== クラス名
+
+`RecordEditRequestController`
+
+=== フィールド
+
+[cols="1,1,2", options="header"]
+|===
+|名称 |型 |説明
+
+|recordEditRequestService
+|RecordEditRequestService
+|依頼取得サービス
+|===
+
+=== アノテーション
+
+[cols="1,1", options="header"]
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/records/team/requests"), @RequiredArgsConstructor
+
+|メソッド
+|@GetMapping
+
+|引数
+|@AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`fetchRequestsForMyRecords`
+
+=== 戻り値
+
+[cols="1,1", options="header"]
+|===
+|戻り値型 |説明
+
+|ResponseEntity<List<RecordEditRequestResponseDto>>
+|依頼一覧を返却する
+|===
+
+=== 処理詳細
+
+[cols="1,1,2", options="header"]
+|===
+|順序 |概要 |詳細
+
+|1
+|ユーザーIDの取得
+|* `@AuthenticationPrincipal` によりログインユーザーの userId を取得する
+
+|2
+|サービス呼び出し
+|* recordEditRequestService.fetchRequestsForMyRecords(userId) を呼び出す
+
+|3
+|レスポンス返却
+|* ResponseEntity.ok(依頼一覧) を返却する
+|===
+
+== Service定義
+
+=== インターフェース
+
+`RecordEditRequestService`
+
+[cols="1,1,1,2", options="header"]
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|fetchRequestsForMyRecords
+|Long userId
+|List<RecordEditRequestResponseDto>
+|ログインユーザーが作成した記録に対する依頼一覧を返却する
+|===
+
+=== 実装クラス
+
+`RecordEditRequestServiceImpl`
+
+=== フィールド
+
+[cols="1,1,2", options="header"]
+|===
+|名称 |型 |説明
+
+|recordEditRequestRepository
+|RecordEditRequestRepository
+|依頼取得用のリポジトリ
+|===
+
+=== 処理詳細
+
+[cols="1,1,2", options="header"]
+|===
+|順序 |概要 |詳細
+
+|1
+|依頼一覧の取得
+|* recordEditRequestRepository.selectByRecordOwner(userId) を呼び出す  
+* 対象：team_matches.user_id が userId に一致する記録に対する依頼
+
+|2
+|レスポンスDTOの生成
+|* 各エンティティから RecordEditRequestResponseDto に変換  
+* 各フィールドを詰めてリストとして返却する
+|===
+
+== Repository定義
+
+=== インターフェース名
+
+`RecordEditRequestRepository`
+
+=== アノテーション
+
+[cols="1,1", options="header"]
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== メソッド定義
+
+[cols="1,1,1,2", options="header"]
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|selectByRecordOwner
+|Long userId
+|List<RecordEditRequestEntity>
+|指定ユーザーが作成した記録に対する依頼一覧を取得する
+|===
+
+=== 使用クエリ（MyBatis）
+
+[source,sql]
+----
+SELECT
+  r.id,
+  r.record_id,
+  m.tournament_name,
+  r.request_type,
+  r.reason,
+  u.nickname AS requester_name,
+  r.status,
+  r.created_at
+FROM record_edit_requests r
+JOIN team_matches m ON r.record_id = m.id
+JOIN users u ON r.requester_id = u.id
+WHERE m.user_id = #{userId}
+ORDER BY r.created_at DESC;
+----

@@ -1,0 +1,449 @@
+= 団体戦記録登録API 詳細設計書
+
+== 概要
+
+createTeamMatchRecordApi
+
+団体戦の試合結果をユーザーが個人用に記録するAPI。  
+大会名・試合日・チーム名・選手構成・スコア情報などを受け取り、団体戦記録および各選手のスコア情報をデータベースに保存する。
+
+== Bean定義
+
+=== Entity定義
+
+==== TeamMatchRecordEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|団体戦記録ID（自動採番）
+
+|userId
+|Long
+|記録登録ユーザーID
+
+|clubId
+|Long
+|現在選択中クラブID（クラブ公開の場合のみ）
+
+|tournamentName
+|String
+|大会名
+
+|matchDate
+|LocalDate
+|試合日
+
+|round
+|String
+|ラウンド（例：準決勝）
+
+|redTeamName
+|String
+|赤チーム名
+
+|whiteTeamName
+|String
+|白チーム名
+
+|visibility
+|String
+|公開設定（PRIVATE または CLUB）
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+==== TeamMatchMemberEntity
+
+|===
+|フィールド名 |型 |説明
+
+|recordId
+|Long
+|団体戦記録ID（TeamMatchRecordEntity.id）
+
+|teamColor
+|String
+|チーム色（RED または WHITE）
+
+|position
+|String
+|ポジション（先鋒〜大将）
+
+|playerName
+|String
+|選手名
+
+|scores
+|String
+|スコア（カンマ区切りで最大2つ）
+
+|hasPenalty
+|Boolean
+|▲（反則）が含まれる場合 true
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== Dto定義
+
+==== TeamMatchRegisterRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|tournamentName
+|String
+|@NotBlank
+|大会名
+
+|matchDate
+|LocalDate
+|@NotNull
+|試合日
+
+|round
+|String
+|@NotBlank
+|ラウンド名
+
+|redTeamName
+|String
+|@NotBlank
+|赤チーム名
+
+|whiteTeamName
+|String
+|@NotBlank
+|白チーム名
+
+|redMembers
+|List<MemberDto>
+|@Valid, @Size(min=5, max=5)
+|赤チーム選手情報（先鋒〜大将）
+
+|whiteMembers
+|List<MemberDto>
+|@Valid, @Size(min=5, max=5)
+|白チーム選手情報（先鋒〜大将）
+
+|visibility
+|String
+|@Pattern(regexp = "^(PRIVATE|CLUB)$")
+|公開設定（PRIVATEまたはCLUB）
+|===
+
+===== MemberDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|position
+|String
+|@NotBlank
+|ポジション（例：先鋒）
+
+|playerName
+|String
+|@NotBlank
+|選手名
+
+|scores
+|List<String>
+|@Size(max=2)
+|スコア（例：["メ", "▲"]）
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|tournamentNameが空
+|大会名は必須です。
+|MSG_REC_0001
+|400
+
+|2
+|matchDateがnull
+|試合日は必須です。
+|MSG_REC_0002
+|400
+
+|3
+|roundが空
+|ラウンド名は必須です。
+|MSG_REC_0003
+|400
+
+|4
+|redTeamNameまたはwhiteTeamNameが空
+|チーム名は必須です。
+|MSG_REC_0004
+|400
+
+|5
+|メンバー数が不足／超過
+|各チームに5人必要です。
+|MSG_REC_0005
+|400
+
+|6
+|scoresが3つ以上
+|スコアは最大2つまでです。
+|MSG_REC_0006
+|400
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TeamMatchRecordController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamMatchRecordService
+|TeamMatchRecordService
+|団体戦記録登録処理を行うサービス。`@RequiredArgsConstructor` によりインジェクション。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/records/team"), @RequiredArgsConstructor
+
+|メソッド
+|@PostMapping
+
+|引数
+|@RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`registerTeamMatch`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<Void>
+|登録成功時はHTTP 201を返却（レスポンスボディなし）
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|* 団体戦記録の内容を DTO として受け取る。
+
+|2
+|ログインユーザーID取得
+|* `@AuthenticationPrincipal` を使用してログイン中のユーザーIDを取得する。
+
+|3
+|クラブIDの取得
+|* 公開設定が "CLUB" の場合、ClubContextHolder などから現在選択中のクラブIDを取得する。
+
+|4
+|サービス呼び出し
+|* teamMatchRecordService.register(requestDto, userId, clubId) を呼び出す。
+
+|5
+|レスポンス生成
+|* HTTPステータス201（Created）を返却する。
+
+|–
+|エラー処理
+|* バリデーションエラー時は MSG_SYS_0005 を返却  
+* 認証エラー時は MSG_SYS_0008 を返却  
+* 予期しない例外発生時は MSG_SYS_0003 を返却
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TeamMatchRecordService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|register
+|TeamMatchRegisterRequestDto, Long userId, Long clubId
+|void
+|団体戦記録と選手データを登録する
+|===
+
+=== 実装クラス
+
+`TeamMatchRecordServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamMatchRecordRepository
+|TeamMatchRecordRepository
+|団体戦記録保存用リポジトリ
+
+|clubContextHolder
+|ClubContextHolder
+|現在選択中クラブIDの取得用
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor
+|===
+
+=== パラメータ
+
+|===
+|名称 |型 |説明
+
+|requestDto
+|TeamMatchRegisterRequestDto
+|登録内容
+
+|userId
+|Long
+|ログイン中のユーザーID
+
+|clubId
+|Long
+|現在選択中クラブID（CLUBの場合のみ）
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|団体戦記録エンティティの構築
+|* TeamMatchRecordEntity entity = new TeamMatchRecordEntity() を生成  
+* tournamentName = requestDto.getTournamentName()  
+* matchDate = requestDto.getMatchDate()  
+* round = requestDto.getRound()  
+* redTeamName = requestDto.getRedTeamName()  
+* whiteTeamName = requestDto.getWhiteTeamName()  
+* visibility = requestDto.getVisibility()  
+* userId = userId（引数）を設定  
+* clubId = (visibility == "CLUB" の場合のみ引数 clubId を設定)  
+* createdAt, updatedAt = LocalDateTime.now()
+
+|2
+|団体戦記録の登録
+|* teamMatchRecordRepository.insertMatchRecord(entity) を呼び出す  
+* パラメータ：上記で構築した `TeamMatchRecordEntity`  
+* 登録失敗時は RuntimeException をスロー
+
+|3
+|赤チームのメンバーエンティティの構築
+|* requestDto.getRedMembers() をループ処理し、各 `MemberDto` から TeamMatchMemberEntity を生成  
+* 各 member に対して以下を設定：  
+  * recordId = entity.getId()（INSERT 後に採番されたIDを取得）  
+  * teamColor = "RED"  
+  * position = member.getPosition()  
+  * playerName = member.getPlayerName()  
+  * scores = String.join(",", member.getScores())（例："メ,▲"）  
+  * hasPenalty = member.getScores().contains("▲")  
+  * createdAt, updatedAt = LocalDateTime.now()
+
+|4
+|白チームのメンバーエンティティの構築
+|* requestDto.getWhiteMembers() をループ処理し、赤チームと同様に TeamMatchMemberEntity を生成  
+* teamColor = "WHITE" を設定
+
+|5
+|メンバー情報の登録
+|* 各 TeamMatchMemberEntity を Repository の insertMatchMember に渡して登録  
+* 呼び出し：teamMatchRecordRepository.insertMatchMember(member)  
+* 登録失敗時は RuntimeException をスロー
+|===
+
+
+== Repository定義
+
+=== インターフェース名
+
+`TeamMatchRecordRepository`
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== パラメータ・戻り値
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|insertMatchRecord
+|TeamMatchRecordEntity
+|void
+|団体戦記録を team_matches に登録
+
+|insertMatchMember
+|TeamMatchMemberEntity
+|void
+|選手情報を team_match_members に登録
+|===
+
+=== 使用クエリ（MyBatis）
+
+[source,sql]
+----
+INSERT INTO team_matches (
+  user_id, club_id, tournament_name, match_date, round,
+  red_team_name, white_team_name, visibility, created_at, updated_at
+) VALUES (
+  #{userId}, #{clubId}, #{tournamentName}, #{matchDate}, #{round},
+  #{redTeamName}, #{whiteTeamName}, #{visibility}, #{createdAt}, #{updatedAt}
+);
+----
+
+[source,sql]
+----
+INSERT INTO team_match_members (
+  record_id, team_color, position, player_name, scores, has_penalty, created_at, updated_at
+) VALUES (
+  #{recordId}, #{teamColor}, #{position}, #{playerName}, #{scores}, #{hasPenalty}, #{createdAt}, #{updatedAt}
+);
+----

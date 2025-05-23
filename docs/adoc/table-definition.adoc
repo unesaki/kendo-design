@@ -1129,3 +1129,50 @@
 |DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 |更新日時
 |===
+
+=== record_edit_requests テーブル
+
+[cols="1,1,1,2", options="header"]
+|===
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|依頼ID
+
+|record_id
+|BIGINT
+|NOT NULL, FK(team_matches.id)
+|対象団体戦記録ID
+
+|request_type
+|VARCHAR(10)
+|NOT NULL
+|依頼種別（"UPDATE", "DELETE"）
+
+|requester_id
+|BIGINT
+|NOT NULL, FK(users.id)
+|依頼者ユーザーID
+
+|reason
+|TEXT
+|NULLABLE
+|依頼理由（省略可能）
+
+|status
+|VARCHAR(10)
+|DEFAULT 'PENDING'
+|ステータス（PENDING / ACCEPTED / REJECTED）
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
+|===

@@ -1,0 +1,226 @@
+= 団体戦記録 更新・削除依頼登録API 詳細設計書
+
+== 概要
+
+createRecordEditRequestApi
+
+ログインユーザーが、他ユーザーの団体戦記録に対して更新または削除の依頼を登録するAPI。
+
+== Bean定義
+
+=== Dto定義
+
+==== RecordEditRequestDto
+
+[cols="1,1,1,2", options="header"]
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|recordId
+|Long
+|@NotNull
+|対象の団体戦記録ID
+
+|requestType
+|String
+|@Pattern(regexp = "^(UPDATE|DELETE)$")
+|依頼種別（UPDATEまたはDELETE）
+
+|reason
+|String
+|なし
+|依頼理由（任意）
+|===
+
+=== バリデーションエラー一覧
+
+[cols="1,1,1,1,1", options="header"]
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|recordIdがnull
+|対象IDは必須です。
+|MSG_REQ_0001
+|400
+
+|2
+|requestTypeが不正
+|依頼種別が不正です。
+|MSG_REQ_0002
+|400
+|===
+
+== Controller定義
+
+=== クラス名
+
+`RecordEditRequestController`
+
+=== フィールド
+
+[cols="1,1,2", options="header"]
+|===
+|名称 |型 |説明
+
+|recordEditRequestService
+|RecordEditRequestService
+|依頼登録処理サービス
+|===
+
+=== アノテーション
+
+[cols="1,1", options="header"]
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/records/team/requests"), @RequiredArgsConstructor
+
+|メソッド
+|@PostMapping
+
+|引数
+|@RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`createRequest`
+
+=== 戻り値
+
+[cols="1,1", options="header"]
+|===
+|戻り値型 |説明
+
+|ResponseEntity<Void>
+|登録成功時はHTTP 201（Created）を返却
+|===
+
+=== 処理詳細
+
+[cols="1,1,2", options="header"]
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|* RecordEditRequestDto を受け取る
+
+|2
+|ログインユーザーの取得
+|* `@AuthenticationPrincipal` により userId を取得する
+
+|3
+|サービス呼び出し
+|* recordEditRequestService.create(requestDto, userId) を呼び出す
+
+|4
+|レスポンス返却
+|* ResponseEntity.status(HttpStatus.CREATED).build() を返却する
+|===
+
+== Service定義
+
+=== インターフェース
+
+`RecordEditRequestService`
+
+[cols="1,1,1,2", options="header"]
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|create
+|RecordEditRequestDto, Long userId
+|void
+|依頼情報を保存する
+|===
+
+=== 実装クラス
+
+`RecordEditRequestServiceImpl`
+
+=== フィールド
+
+[cols="1,1,2", options="header"]
+|===
+|名称 |型 |説明
+
+|recordEditRequestRepository
+|RecordEditRequestRepository
+|依頼情報保存用リポジトリ
+|===
+
+=== 処理詳細
+
+[cols="1,1,2", options="header"]
+|===
+|順序 |概要 |詳細
+
+|1
+|エンティティの構築
+|* RecordEditRequestEntity entity = new RecordEditRequestEntity() を生成  
+* recordId = requestDto.getRecordId() を設定  
+* requestType = requestDto.getRequestType() を設定  
+* requesterId = userId を設定  
+* reason = requestDto.getReason() を設定（任意）  
+* status = "PENDING" を設定  
+* createdAt, updatedAt = LocalDateTime.now()
+
+|2
+|登録実行
+|* recordEditRequestRepository.insert(entity) を呼び出す  
+* 登録失敗時は RuntimeException をスローする
+|===
+
+== Repository定義
+
+=== インターフェース名
+
+`RecordEditRequestRepository`
+
+=== アノテーション
+
+[cols="1,1", options="header"]
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== メソッド定義
+
+[cols="1,1,1,2", options="header"]
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|insert
+|RecordEditRequestEntity
+|void
+|依頼レコードを record_edit_requests テーブルに登録する
+|===
+
+=== 使用クエリ（MyBatis）
+
+[source,sql]
+----
+INSERT INTO record_edit_requests (
+  record_id,
+  request_type,
+  requester_id,
+  reason,
+  status,
+  created_at,
+  updated_at
+) VALUES (
+  #{recordId},
+  #{requestType},
+  #{requesterId},
+  #{reason},
+  'PENDING',
+  NOW(),
+  NOW()
+);
+----

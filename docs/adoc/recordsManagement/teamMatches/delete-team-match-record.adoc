@@ -1,0 +1,199 @@
+= 団体戦記録削除API 詳細設計書
+
+== 概要
+
+deleteTeamMatchRecordApi
+
+ユーザー自身が登録した団体戦記録を削除するAPI。  
+記録IDを指定して対象の団体戦記録と紐づく全ての選手情報（メンバー情報）を論理削除または物理削除する。
+
+== Bean定義
+
+※削除処理のため専用のリクエストDTOは定義しない。  
+リクエストは `@PathVariable Long id` のみ。
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|指定IDの記録が存在しない、または他ユーザーの記録
+|対象の団体戦記録が存在しません。
+|MSG_REC_0007
+|404
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TeamMatchRecordController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamMatchRecordService
+|TeamMatchRecordService
+|団体戦記録削除処理を行うサービス
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/records/team"), @RequiredArgsConstructor
+
+|メソッド
+|@DeleteMapping("/{id}")
+
+|引数
+|@PathVariable, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`deleteTeamMatch`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<Void>
+|削除成功時はHTTP 204を返却（No Content）
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|ログインユーザーの取得
+|* `@AuthenticationPrincipal` により userId を取得する
+
+|2
+|サービス呼び出し
+|* teamMatchRecordService.delete(id, userId) を呼び出す
+
+|3
+|レスポンス返却
+|* 成功時は ResponseEntity.noContent().build() を返却
+
+|–
+|エラー処理
+|* 指定された記録が存在しない、または userId が一致しない → BusinessException → MSG_REC_0007  
+* その他例外 → RuntimeException → MSG_SYS_0003
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TeamMatchRecordService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|delete
+|Long id, Long userId
+|void
+|対象の団体戦記録とメンバー情報を削除する
+|===
+
+=== 実装クラス
+
+`TeamMatchRecordServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamMatchRecordRepository
+|TeamMatchRecordRepository
+|団体戦記録用リポジトリ
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|対象記録の存在確認
+|* teamMatchRecordRepository.existsByIdAndUserId(id, userId) を呼び出して確認  
+* 存在しない場合は BusinessException をスローし、MSG_REC_0007 を返却
+
+|2
+|メンバー情報の削除
+|* teamMatchRecordRepository.deleteMatchMembersByRecordId(id) を呼び出し、該当レコードを削除  
+* 削除対象：team_match_members テーブルの該当行
+
+|3
+|団体戦記録の削除
+|* teamMatchRecordRepository.deleteMatchRecord(id) を呼び出し、団体戦記録を削除  
+* 削除対象：team_matches テーブルの該当行  
+* 削除失敗時は RuntimeException をスロー
+|===
+
+== Repository定義
+
+=== インターフェース名
+
+`TeamMatchRecordRepository`
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== パラメータ・戻り値
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|existsByIdAndUserId
+|Long id, Long userId
+|boolean
+|対象の記録がログインユーザーによるものかを確認
+
+|deleteMatchMembersByRecordId
+|Long recordId
+|void
+|該当団体戦記録に紐づく全選手情報を削除
+
+|deleteMatchRecord
+|Long id
+|void
+|団体戦記録そのものを削除
+|===
+
+=== 使用クエリ（MyBatis）
+
+[source,sql]
+----
+SELECT COUNT(*) > 0 FROM team_matches
+WHERE id = #{id} AND user_id = #{userId};
+----
+
+[source,sql]
+----
+DELETE FROM team_match_members
+WHERE record_id = #{recordId};
+----
+
+[source,sql]
+----
+DELETE FROM team_matches
+WHERE id = #{id};
+----

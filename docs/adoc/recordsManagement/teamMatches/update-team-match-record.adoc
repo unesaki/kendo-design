@@ -1,0 +1,358 @@
+= 団体戦記録更新API 詳細設計書
+
+== 概要
+
+updateTeamMatchRecordApi
+
+既存の団体戦記録を編集・修正するAPI。  
+大会名・試合日・チーム名・選手構成・スコア情報を更新し、以前の情報を上書きする。
+
+== Bean定義
+
+=== Dto定義
+
+==== TeamMatchUpdateRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|tournamentName
+|String
+|@NotBlank
+|大会名
+
+|matchDate
+|LocalDate
+|@NotNull
+|試合日
+
+|round
+|String
+|@NotBlank
+|ラウンド名
+
+|redTeamName
+|String
+|@NotBlank
+|赤チーム名
+
+|whiteTeamName
+|String
+|@NotBlank
+|白チーム名
+
+|redMembers
+|List<MemberDto>
+|@Valid, @Size(min=5, max=5)
+|赤チーム選手情報（先鋒〜大将）
+
+|whiteMembers
+|List<MemberDto>
+|@Valid, @Size(min=5, max=5)
+|白チーム選手情報（先鋒〜大将）
+
+|visibility
+|String
+|@Pattern(regexp = "^(PRIVATE|CLUB)$")
+|公開設定（PRIVATEまたはCLUB）
+|===
+
+===== MemberDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|position
+|String
+|@NotBlank
+|ポジション（例：先鋒）
+
+|playerName
+|String
+|@NotBlank
+|選手名
+
+|scores
+|List<String>
+|@Size(max=2)
+|スコア（例：["メ", "▲"]）
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|tournamentNameが空
+|大会名は必須です。
+|MSG_REC_0001
+|400
+
+|2
+|matchDateがnull
+|試合日は必須です。
+|MSG_REC_0002
+|400
+
+|3
+|roundが空
+|ラウンド名は必須です。
+|MSG_REC_0003
+|400
+
+|4
+|redTeamNameまたはwhiteTeamNameが空
+|チーム名は必須です。
+|MSG_REC_0004
+|400
+
+|5
+|メンバー数が不足／超過
+|各チームに5人必要です。
+|MSG_REC_0005
+|400
+
+|6
+|scoresが3つ以上
+|スコアは最大2つまでです。
+|MSG_REC_0006
+|400
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TeamMatchRecordController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamMatchRecordService
+|TeamMatchRecordService
+|団体戦記録更新処理を行うサービス
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/records/team"), @RequiredArgsConstructor
+
+|メソッド
+|@PutMapping("/{id}")
+
+|引数
+|@PathVariable, @RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`updateTeamMatch`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<Void>
+|更新成功時はHTTP 200を返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|* 更新対象の記録IDと更新内容DTOを受け取る。
+
+|2
+|ユーザー認証
+|* `@AuthenticationPrincipal` でログイン中のユーザーIDを取得する。
+
+|3
+|クラブIDの取得
+|* visibility = CLUB の場合、現在選択中のクラブIDを取得する。
+
+|4
+|サービス呼び出し
+|* teamMatchRecordService.update(id, requestDto, userId, clubId) を実行する。
+
+|5
+|レスポンス返却
+|* 正常時はHTTP 200（OK）を返却する。
+
+|–
+|エラー処理
+|* バリデーションエラー → MSG_SYS_0005  
+* 認証エラー → MSG_SYS_0008  
+* 存在しないID → MSG_REC_0007（404）  
+* その他 → MSG_SYS_0003
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TeamMatchRecordService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|update
+|Long id, TeamMatchUpdateRequestDto, Long userId, Long clubId
+|void
+|団体戦記録を指定IDで更新する
+|===
+
+=== 実装クラス
+
+`TeamMatchRecordServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamMatchRecordRepository
+|TeamMatchRecordRepository
+|団体戦記録用リポジトリ
+
+|clubContextHolder
+|ClubContextHolder
+|現在選択中クラブIDの取得用
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|既存記録の存在確認
+|* teamMatchRecordRepository.existsByIdAndUserId(id, userId) を呼び出し、対象記録がログインユーザー本人のものであることを確認する  
+* 該当がない場合は BusinessException をスローし、MSG_REC_0007 を返却
+
+|2
+|団体戦記録エンティティの構築
+|* TeamMatchRecordEntity entity = new TeamMatchRecordEntity() を生成し、以下を設定する：  
+  * id = id  
+  * tournamentName = requestDto.getTournamentName()  
+  * matchDate = requestDto.getMatchDate()  
+  * round = requestDto.getRound()  
+  * redTeamName = requestDto.getRedTeamName()  
+  * whiteTeamName = requestDto.getWhiteTeamName()  
+  * visibility = requestDto.getVisibility()  
+  * userId = userId  
+  * clubId = (visibility == CLUB の場合のみ clubId をセット)  
+  * updatedAt = LocalDateTime.now()
+
+|3
+|団体戦記録の更新
+|* teamMatchRecordRepository.updateMatchRecord(entity) を呼び出す  
+* パラメータ：2. で構築した entity  
+* 更新失敗時は RuntimeException をスロー
+
+|4
+|旧メンバー情報の削除
+|* teamMatchRecordRepository.deleteMatchMembersByRecordId(id) を呼び出す  
+* 該当する全メンバー行を削除する
+
+|5
+|新しいメンバーエンティティの構築と登録
+|* requestDto.redMembers および whiteMembers をそれぞれループ処理  
+* 各 MemberDto について以下の TeamMatchMemberEntity を構築：  
+  * recordId = id  
+  * teamColor = "RED" または "WHITE" をループで明示指定  
+  * position = memberDto.getPosition()  
+  * playerName = memberDto.getPlayerName()  
+  * scores = String.join(",", memberDto.getScores())  
+  * hasPenalty = memberDto.getScores().contains("▲")  
+  * createdAt, updatedAt = LocalDateTime.now()  
+* 各 entity を teamMatchRecordRepository.insertMatchMember(member) に渡して登録
+|===
+
+== Repository定義
+
+=== インターフェース名
+
+`TeamMatchRecordRepository`
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== パラメータ・戻り値
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|existsByIdAndUserId
+|Long id, Long userId
+|boolean
+|団体戦記録がログインユーザーのものであるかを確認
+
+|updateMatchRecord
+|TeamMatchRecordEntity
+|void
+|団体戦記録を更新する
+
+|deleteMatchMembersByRecordId
+|Long recordId
+|void
+|団体戦記録に紐づく全メンバー情報を削除
+
+|insertMatchMember
+|TeamMatchMemberEntity
+|void
+|団体戦メンバー情報を1件登録
+|===
+
+=== 使用クエリ（MyBatis）
+
+[source,sql]
+----
+SELECT COUNT(*) > 0 FROM team_matches
+WHERE id = #{id} AND user_id = #{userId};
+----
+
+[source,sql]
+----
+UPDATE team_matches SET
+  tournament_name = #{tournamentName},
+  match_date = #{matchDate},
+  round = #{round},
+  red_team_name = #{redTeamName},
+  white_team_name = #{whiteTeamName},
+  visibility = #{visibility},
+  club_id = #{clubId},
+  updated_at = #{updatedAt}
+WHERE id = #{id};
+----
+
+[source,sql]
+----
+DELETE FROM team_match_members
+WHERE record_id = #{recordId};
+----
+
+[source,sql]
+----
+INSERT INTO team_match_members (
+  record_id, team_color, position, player_name, scores, has_penalty, created_at, updated_at
+) VALUES (
+  #{recordId}, #{teamColor}, #{position}, #{playerName}, #{scores}, #{hasPenalty}, #{createdAt}, #{updatedAt}
+);
+----

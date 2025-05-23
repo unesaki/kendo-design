@@ -1,0 +1,214 @@
+= 団体戦記録一覧取得API 詳細設計書
+
+== 概要
+
+getTeamMatchRecordListApi
+
+ログインユーザーが登録した団体戦記録を一覧形式で取得するAPI。  
+1件ごとの概要情報（大会名・日付・チーム名・公開範囲など）を返却する。
+
+== Bean定義
+
+=== Dto定義
+
+==== TeamMatchSummaryResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|団体戦記録ID
+
+|tournamentName
+|String
+|大会名
+
+|matchDate
+|LocalDate
+|試合日
+
+|round
+|String
+|ラウンド（例：準決勝）
+
+|redTeamName
+|String
+|赤チーム名
+
+|whiteTeamName
+|String
+|白チーム名
+
+|visibility
+|String
+|公開範囲（PRIVATE または CLUB）
+
+|createdAt
+|LocalDateTime
+|登録日時
+|===
+
+=== バリデーションエラー一覧
+
+※本APIにバリデーション項目はなし。
+
+== Controller定義
+
+=== クラス名
+
+`TeamMatchRecordController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamMatchRecordService
+|TeamMatchRecordService
+|団体戦記録取得処理を行うサービス
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/records/team"), @RequiredArgsConstructor
+
+|メソッド
+|@GetMapping
+
+|引数
+|@AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`getTeamMatchList`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<List<TeamMatchSummaryResponseDto>>
+|ログインユーザーが登録した団体戦記録一覧を返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|ユーザーIDの取得
+|* `@AuthenticationPrincipal` によりログインユーザーID（userId）を取得する
+
+|2
+|サービス呼び出し
+|* teamMatchRecordService.getList(userId) を呼び出す
+
+|3
+|レスポンス返却
+|* 取得結果を ResponseEntity.ok(list) で返却
+
+|–
+|エラー処理
+|* サーバー側例外発生時は MSG_SYS_0003 を返却
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TeamMatchRecordService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|getList
+|Long userId
+|List<TeamMatchSummaryResponseDto>
+|ログインユーザーの団体戦記録一覧を返却
+|===
+
+=== 実装クラス
+
+`TeamMatchRecordServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|teamMatchRecordRepository
+|TeamMatchRecordRepository
+|団体戦記録用リポジトリ
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|団体戦記録の一覧取得
+|* teamMatchRecordRepository.selectMatchListByUserId(userId) を呼び出す  
+* パラメータ：userId  
+* 戻り値：List<TeamMatchRecordEntity>
+
+|2
+|レスポンスDTOの生成
+|* 各 TeamMatchRecordEntity をループ処理し、以下の項目を取り出して TeamMatchSummaryResponseDto に変換する：  
+  * id, tournamentName, matchDate, round, redTeamName, whiteTeamName, visibility, createdAt
+
+|3
+|DTOリストの返却
+|* List<TeamMatchSummaryResponseDto> を返却
+|===
+
+== Repository定義
+
+=== インターフェース名
+
+`TeamMatchRecordRepository`
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== パラメータ・戻り値
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|selectMatchListByUserId
+|Long userId
+|List<TeamMatchRecordEntity>
+|ログインユーザーが登録した団体戦記録を一覧取得する
+|===
+
+=== 使用クエリ（MyBatis）
+
+[source,sql]
+----
+SELECT
+  id,
+  tournament_name,
+  match_date,
+  round,
+  red_team_name,
+  white_team_name,
+  visibility,
+  created_at
+FROM team_matches
+WHERE user_id = #{userId}
+ORDER BY match_date DESC;
+----

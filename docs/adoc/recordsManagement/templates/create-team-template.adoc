@@ -308,13 +308,13 @@ createTeamTemplateApi
 
 |1
 |エンティティの生成
-|DTOから `TeamTemplateEntity` を生成。  
+|* DTOから `TeamTemplateEntity` を生成。  
 * name, clubId, createdBy に値をセット  
 * createdAt, updatedAt に現在日時を設定
 
 |2
 |テンプレートの登録
-|`teamTemplateRepository.insertTemplate(entity)` を呼び出し、テンプレートをDBに登録。  
+|* `teamTemplateRepository.insertTemplate(entity)` を呼び出し、テンプレートをDBに登録。  
 * 自動採番されたIDが `entity.id` に格納される  
 * 登録失敗時は `RuntimeException` をスロー  
 * 共通エラー `MSG_SYS_0003`, `MSG_SYS_0010`
@@ -332,7 +332,7 @@ createTeamTemplateApi
 
 |5
 |レスポンス生成
-|* 登録したテンプレート情報とメンバーを DTO に詰めて返却する
+|登録したテンプレート情報とメンバーを DTO に詰めて返却する
 
 |–
 |エラー処理
