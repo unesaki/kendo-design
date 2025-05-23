@@ -1,0 +1,247 @@
+@startuml
+
+actor ユーザ
+participant 画面
+participant API
+database DB
+
+group 団体戦記録の登録
+	ユーザ -> 画面 : 入力
+
+	画面 -> API : 登録データ送信
+	note right 画面
+	【リクエスト】
+		tournament_name  
+		match_date  
+		round  
+		red_team_name  
+		white_team_name  
+		red_members[].position  
+		red_members[].player_name  
+		red_members[].score_codes[]  
+		white_members[].position  
+		white_members[].player_name  
+		white_members[].score_codes[]
+
+	【レスポンス】
+		id  
+		created_at
+	end note
+
+	API -> DB : INSERT team_matches
+	note right API
+	【team_matches テーブル】
+		tournament_name  
+		match_date  
+		round  
+		red_team_name  
+		white_team_name  
+		created_by  
+		created_at  
+		updated_at
+
+	【キー】
+		id（AUTO_INCREMENT）
+	end note
+
+	API -> DB : INSERT team_match_members
+	note right API
+	【team_match_members テーブル】
+		team_match_id  
+		position  
+		player_name  
+		side  
+		score_codes  
+		created_at  
+		updated_at
+
+	【キー】
+		team_match_id + position + side
+	end note
+
+	API --> 画面 : 記録ID・日時を返却
+end
+
+group 団体戦記録の一覧取得
+	ユーザ -> 画面 : 一覧表示
+
+	画面 -> API : 一覧取得
+	note right 画面
+	【リクエスト】
+		ログインユーザーのID
+
+	【レスポンス】
+		id  
+		tournament_name  
+		match_date  
+		visibility  
+		created_at
+	end note
+
+	API -> DB : SELECT team_matches
+	note right API
+	【team_matches テーブル】
+		id  
+		tournament_name  
+		match_date  
+		visibility  
+		created_at
+
+	【キー】
+		created_by = ログインユーザーID
+	end note
+
+	API --> 画面 : 一覧データ返却
+end
+
+group 公開範囲の変更
+	ユーザ -> 画面 : 公開状態を変更
+
+	画面 -> API : PATCH送信
+	note right 画面
+	【リクエスト】
+		visibility（"PRIVATE" or "CLUB"）
+
+	【レスポンス】
+		なし（HTTP 200 OK）
+	end note
+
+	API -> DB : UPDATE team_matches
+	note right API
+	【team_matches テーブル】
+		visibility  
+		updated_at
+
+	【キー】
+		id, created_by
+	end note
+
+	API --> 画面 : OK
+end
+
+group 公開記録の閲覧（他人）
+	ユーザ -> 画面 : クラブ内公開記録の閲覧
+
+	画面 -> API : 一覧取得
+	note right 画面
+	【リクエスト】
+		club_id（選択中クラブ）
+
+	【レスポンス】
+		id  
+		tournament_name  
+		match_date  
+		created_by  
+		created_at
+	end note
+
+	API -> DB : SELECT team_matches
+	note right API
+	【team_matches テーブル】
+		id  
+		tournament_name  
+		match_date  
+		created_by  
+		created_at
+
+	【キー】
+		visibility = "CLUB", club_id
+	end note
+
+	API --> 画面 : 一覧返却
+end
+
+group 更新・削除依頼の送信
+	ユーザ -> 画面 : 依頼入力
+
+	画面 -> API : POST送信
+	note right 画面
+	【リクエスト】
+		record_id  
+		request_type（"UPDATE" or "DELETE"）  
+		reason（任意）
+
+	【レスポンス】
+		id  
+		created_at
+	end note
+
+	API -> DB : INSERT record_edit_requests
+	note right API
+	【record_edit_requests テーブル】
+		record_id  
+		request_type  
+		requester_id  
+		reason  
+		status = "PENDING"  
+		created_at  
+		updated_at
+
+	【キー】
+		id（AUTO_INCREMENT）
+	end note
+
+	API --> 画面 : 登録完了
+end
+
+group 依頼一覧取得（記録作成者）
+	ユーザ -> 画面 : 依頼一覧表示
+
+	画面 -> API : 一覧取得
+	note right 画面
+	【リクエスト】
+		ログインユーザーのID
+
+	【レスポンス】
+		id  
+		record_id  
+		request_type  
+		reason  
+		status  
+		requester_name  
+		created_at
+	end note
+
+	API -> DB : JOIN record_edit_requests + team_matches + users
+	note right API
+	【対象テーブル】
+		record_edit_requests  
+		team_matches  
+		users  
+
+	【取得項目】
+		id, record_id, request_type, reason, status, requester_name, created_at
+
+	【キー】
+		team_matches.created_by = ログインユーザーID
+	end note
+
+	API --> 画面 : 一覧返却
+end
+
+group 依頼の承認・拒否
+	ユーザ -> 画面 : ステータス変更操作
+
+	画面 -> API : PATCH送信
+	note right 画面
+	【リクエスト】
+		status（"ACCEPTED" or "REJECTED"）
+
+	【レスポンス】
+		なし（HTTP 200 OK）
+	end note
+
+	API -> DB : UPDATE record_edit_requests
+	note right API
+	【record_edit_requests テーブル】
+		status  
+		updated_at
+
+	【キー】
+		id, 対象の記録作成者 = ログインユーザー
+	end note
+
+	API --> 画面 : 更新完了
+end
+
+@enduml
