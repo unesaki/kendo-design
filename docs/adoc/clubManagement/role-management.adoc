@@ -1,0 +1,434 @@
+= ロール管理API 詳細設計書
+
+== 概要
+
+updateMemberRoleApi
+
+クラブ管理者がクラブメンバーのロール（管理者/参加者）を変更するAPI。
+管理者は複数人設定可能だが、最後の管理者は参加者に変更できない。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[クラブ管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== UpdateMemberRoleRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|targetUserId
+|Long
+|@NotNull
+|ロール変更対象のユーザーID
+
+|newRole
+|ClubRole
+|@NotNull
+|新しいロール（ADMIN/MEMBER）
+|===
+
+==== UpdateMemberRoleResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|targetUser
+|ClubMemberDto
+|ロール変更されたメンバー情報
+
+|club
+|ClubDto
+|対象クラブ情報
+
+|previousRole
+|ClubRole
+|変更前のロール
+
+|newRole
+|ClubRole
+|変更後のロール
+
+|updatedAt
+|LocalDateTime
+|変更日時
+
+|message
+|String
+|変更完了メッセージ
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|targetUserIdがnullの場合
+|対象ユーザーIDは必須です。
+|MSG_SYS_0005
+|400
+
+|2
+|newRoleがnullの場合
+|新しいロールは必須です。
+|MSG_SYS_0005
+|400
+
+|3
+|対象ユーザーが見つからない場合
+|指定されたユーザーが見つかりません。
+|MSG_CLB_0007
+|404
+
+|4
+|対象ユーザーがクラブメンバーでない場合
+|このクラブのメンバーではありません。
+|MSG_CLB_0004
+|403
+
+|5
+|実行ユーザーに管理者権限がない場合
+|この操作にはクラブ管理者権限が必要です。
+|MSG_CLB_0003
+|403
+
+|6
+|自分自身のロールを変更しようとした場合
+|自分以外のユーザーは操作できません。
+|MSG_CLB_0005
+|403
+
+|7
+|最後の管理者を参加者に変更しようとした場合
+|最後の管理者は退会できません。
+|MSG_CLB_0013
+|409
+
+|8
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`ClubController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|clubService
+|ClubService
+|クラブ管理処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/clubs"), @RequiredArgsConstructor
+
+|メソッド
+|@PutMapping("/{clubId}/members/{targetUserId}/role")
+
+|引数
+|@PathVariable, @RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`updateMemberRole`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<UpdateMemberRoleResponseDto>
+|更新成功時に結果情報を返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|* パスパラメータからクラブID（clubId）と対象ユーザーID（targetUserId）を取得  
+* リクエストボディから新しいロールを DTO（UpdateMemberRoleRequestDto）として受け取る
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーの ID（adminUserId）を取得する。
+
+|3
+|サービス呼び出し
+|`clubService.updateMemberRole(clubId, targetUserId, requestDto, adminUserId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `UpdateMemberRoleResponseDto` を `ResponseEntity.ok().body(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* バリデーションエラーが発生した場合は適切なメッセージIDを返す  
+* 権限エラーや業務ルールエラーの場合は適切なメッセージIDを返す
+|===
+
+== Service定義
+
+=== インターフェース
+
+`ClubService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|updateMemberRole
+|Long clubId, Long targetUserId, UpdateMemberRoleRequestDto, Long adminUserId
+|UpdateMemberRoleResponseDto
+|指定メンバーのロールを変更する。
+|===
+
+=== 実装クラス
+
+`ClubServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|clubRepository
+|ClubRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+
+|clubMemberRepository
+|ClubMemberRepository
+|クラブメンバー管理に使用
+
+|clubPermissionService
+|ClubPermissionService
+|権限チェックに使用
+
+|clubNotificationService
+|ClubNotificationService
+|通知送信に使用
+
+|userRepository
+|UserRepository
+|ユーザー情報取得に使用
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|基本情報取得・検証
+|* `clubRepository.findById(clubId)` でクラブの存在を確認  
+* `userRepository.findById(targetUserId)` で対象ユーザーの存在を確認  
+* 存在しない場合は適切な例外をスロー
+
+|2
+|管理者権限確認
+|* `clubPermissionService.validateClubAdminPermission(adminUserId, clubId)` で実行ユーザーの管理者権限を確認  
+* 権限がない場合は `InsufficientPermissionException` をスロー → `MSG_CLB_0003`
+
+|3
+|自己操作防止チェック
+|* targetUserId == adminUserId の場合は `SelfOperationException` をスロー → `MSG_CLB_0005`
+
+|4
+|対象ユーザーのメンバーシップ確認
+|* `clubMemberRepository.findByUserIdAndClubId(targetUserId, clubId)` で対象ユーザーのメンバー情報を取得  
+* メンバーでない場合は `NotMemberException` をスロー → `MSG_CLB_0004`
+
+|5
+|最後の管理者チェック（MEMBER降格時）
+|* newRole が MEMBER で、現在のロールが ADMIN の場合：  
+** `clubMemberRepository.countAdminsByClubId(clubId)` で管理者数を取得  
+** 管理者が1人のみの場合は `LastAdminException` をスロー → `MSG_CLB_0013`
+
+|6
+|ロール更新
+|* `clubMemberRepository.updateMemberRole(targetUserId, clubId, newRole)` でロールを更新  
+* 更新失敗時は `RuntimeException` をスロー → `MSG_SYS_0003`
+
+|7
+|変更通知
+|* `clubNotificationService.notifyRoleChanged(targetUserId, clubId, newRole)` で対象ユーザーに通知
+
+|8
+|レスポンス生成
+|UpdateMemberRoleResponseDto に以下の情報を設定して返却：  
+* targetUser: 更新されたメンバー情報（ClubMemberDto）  
+* club: 対象クラブ情報（ClubDto）  
+* previousRole: 変更前のロール  
+* newRole: 変更後のロール  
+* updatedAt: 変更日時  
+* message: "メンバーのロールを変更しました。"
+
+|–
+|エラー処理
+|* トランザクション内でエラーが発生した場合はロールバック  
+* 各種例外をスローし、エラーメッセージを返す
+|===
+
+== Repository定義
+
+=== ClubMemberRepository（追加メソッド）
+
+共通定義に加えて、以下のメソッドを使用：
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|updateMemberRole
+|Long userId, Long clubId, ClubRole role
+|void
+|メンバーのロールを更新
+
+|countAdminsByClubId
+|Long clubId
+|Integer
+|クラブの管理者数を取得
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== ロール更新
+
+[source,sql]
+----
+UPDATE club_members
+SET role = #{role},
+    updated_at = NOW()
+WHERE user_id = #{userId}
+  AND club_id = #{clubId}
+----
+
+==== 管理者数取得
+
+[source,sql]
+----
+SELECT COUNT(*)
+FROM club_members
+WHERE club_id = #{clubId}
+  AND role = 'admin'
+----
+
+== 業務ルール
+
+=== ロール変更制限
+
+1. **自己操作禁止**: 管理者は自分自身のロールを変更できない
+2. **最後の管理者保護**: クラブに管理者が1人のみの場合、その管理者を参加者に変更できない
+3. **権限必須**: ロール変更は管理者権限を持つユーザーのみ実行可能
+
+=== 管理者の責任
+
+* **権限範囲**: 所属クラブ内のメンバーのみ操作可能
+* **通知責任**: ロール変更時は対象ユーザーへの適切な通知が必要
+* **運営責任**: クラブの適切な運営のため、最低1人の管理者を維持
+
+== 通知機能
+
+=== ロール変更通知
+
+対象ユーザーに以下の内容で通知を送信：
+
+* **昇格時（MEMBER → ADMIN）**:
+  - 件名: 「【剣道大会管理システム】クラブ管理者に任命されました」
+  - 内容: クラブ名、変更日時、管理者権限の説明
+
+* **降格時（ADMIN → MEMBER）**:
+  - 件名: 「【剣道大会管理システム】ロールが変更されました」
+  - 内容: クラブ名、変更日時、参加者権限の説明
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== 管理者昇格リクエスト
+```json
+PUT /api/clubs/1/members/789/role
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "newRole": "ADMIN"
+}
+```
+
+==== 参加者降格リクエスト
+```json
+PUT /api/clubs/1/members/789/role
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "newRole": "MEMBER"
+}
+```
+
+==== 成功レスポンス
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "targetUser": {
+        "userId": 789,
+        "userName": "田中太郎",
+        "userEmail": "tanaka@example.com",
+        "role": "ADMIN",
+        "joinedAt": "2024-01-10T10:00:00"
+    },
+    "club": {
+        "id": 1,
+        "name": "東京剣道クラブ",
+        "memberCount": 5
+    },
+    "previousRole": "MEMBER",
+    "newRole": "ADMIN",
+    "updatedAt": "2024-01-15T16:30:00",
+    "message": "メンバーのロールを変更しました。"
+}
+```
+
+==== エラーレスポンス（最後の管理者）
+```json
+HTTP/1.1 409 Conflict
+Content-Type: application/json
+
+{
+    "error": {
+        "code": "MSG_CLB_0013",
+        "message": "最後の管理者は退会できません。",
+        "timestamp": "2024-01-15T16:30:00"
+    }
+}
+```

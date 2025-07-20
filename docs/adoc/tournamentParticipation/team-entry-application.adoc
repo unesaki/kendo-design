@@ -1,0 +1,668 @@
+= チームエントリー申請API 詳細設計書
+
+== 概要
+
+submitTeamEntryApi
+
+クラブ管理者が所属クラブを大会にエントリー申請するAPI。
+大会検索から申請まで一連の流れを支援し、主催者の承認を待つ状態で登録する。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[大会参加管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== SubmitTeamEntryRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|tournamentId
+|Long
+|@NotNull
+|エントリー対象の大会ID
+
+|teamName
+|String
+|@NotBlank, @Size(max=50)
+|チーム名（自由入力）
+
+|comment
+|String
+|@Size(max=500)
+|申請コメント（任意）
+|===
+
+==== SubmitTeamEntryResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|entryId
+|Long
+|作成されたエントリーID
+
+|tournament
+|TournamentSearchDto
+|エントリー対象の大会情報
+
+|teamEntry
+|TournamentTeamEntryDto
+|作成されたエントリー情報
+
+|nextSteps
+|List<String>
+|次に実行すべきアクション一覧
+
+|message
+|String
+|申請完了メッセージ
+|===
+
+==== TournamentSearchRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|keyword
+|String
+|@Size(max=100)
+|大会名・主催クラブ名での検索キーワード
+
+|eventDateFrom
+|LocalDate
+|
+|開催日範囲検索（開始日）
+
+|eventDateTo
+|LocalDate
+|
+|開催日範囲検索（終了日）
+
+|tournamentType
+|TournamentType
+|
+|大会種別フィルター
+
+|status
+|TournamentStatus
+|
+|大会ステータスフィルター
+
+|excludeOwn
+|Boolean
+|
+|自クラブ主催大会を除外するか
+
+|page
+|Integer
+|@Min(0)
+|ページ番号（デフォルト：0）
+
+|size
+|Integer
+|@Min(1), @Max(50)
+|ページサイズ（デフォルト：20）
+|===
+
+==== TournamentSearchResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|tournaments
+|Page<TournamentSearchDto>
+|検索結果（ページネーション）
+
+|searchCriteria
+|TournamentSearchRequestDto
+|適用された検索条件
+
+|availableFilters
+|SearchFiltersDto
+|利用可能なフィルター選択肢
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|tournamentIdがnullの場合
+|大会IDは必須です。
+|MSG_SYS_0005
+|400
+
+|2
+|teamNameが空の場合
+|チーム名は必須です。
+|MSG_PTC_0001
+|400
+
+|3
+|teamNameが50文字を超える場合
+|チーム名は50文字以内で入力してください。
+|MSG_PTC_0002
+|400
+
+|4
+|commentが500文字を超える場合
+|コメントは500文字以内で入力してください。
+|MSG_PTC_0018
+|400
+
+|5
+|指定された大会が存在しない場合
+|指定された大会が見つかりません。
+|MSG_PTC_0008
+|404
+
+|6
+|クラブ管理者権限がない場合
+|この操作にはクラブ管理者権限が必要です。
+|MSG_PTC_0005
+|403
+
+|7
+|エントリー締切を過ぎている場合
+|エントリー締切を過ぎています。
+|MSG_PTC_0006
+|403
+
+|8
+|既にエントリー済みの場合
+|既にこの大会にエントリー済みです。
+|MSG_PTC_0010
+|409
+
+|9
+|参加上限に達している場合
+|参加上限に達しているため、エントリーできません。
+|MSG_PTC_0011
+|409
+
+|10
+|エントリー受付期間外の場合
+|エントリー受付期間外です。
+|MSG_PTC_0015
+|409
+
+|11
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TournamentParticipationController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|participationService
+|TournamentParticipationService
+|大会参加処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/participation"), @RequiredArgsConstructor
+
+|メソッド（大会検索）
+|@GetMapping("/tournaments/search")
+
+|メソッド（エントリー申請）
+|@PostMapping("/entries")
+
+|引数
+|@RequestParam, @RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+* `searchTournaments` - 参加可能大会検索
+* `submitTeamEntry` - チームエントリー申請
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|searchTournaments
+|ResponseEntity<TournamentSearchResponseDto>
+|検索結果と利用可能フィルターを返却
+
+|submitTeamEntry
+|ResponseEntity<SubmitTeamEntryResponseDto>
+|申請成功時にエントリー情報と次ステップを返却
+|===
+
+=== 処理詳細
+
+==== searchTournaments
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|クエリパラメータから検索条件（キーワード、日付範囲、フィルター、ページング）を取得。
+
+|2
+|ユーザー・クラブ情報取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーIDと現在選択中のクラブIDを取得する。
+
+|3
+|サービス呼び出し
+|`participationService.searchTournaments(searchCriteria, clubId, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `TournamentSearchResponseDto` を `ResponseEntity.ok().body(...)` にラップして返却する。
+|===
+
+==== submitTeamEntry
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|クライアントから送信されたエントリー情報を DTO（SubmitTeamEntryRequestDto）として受け取る。
+
+|2
+|ユーザー・クラブ情報取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーIDと現在選択中のクラブIDを取得する。
+
+|3
+|サービス呼び出し
+|`participationService.submitTeamEntry(requestDto, clubId, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `SubmitTeamEntryResponseDto` を `ResponseEntity.status(HttpStatus.CREATED).body(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* バリデーションエラーが発生した場合は適切なメッセージIDを返す  
+* 権限エラーや業務ルールエラーの場合は適切なメッセージIDを返す
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TournamentParticipationService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|searchTournaments
+|TournamentSearchRequestDto, Long clubId, Long userId
+|TournamentSearchResponseDto
+|参加可能な大会を検索し、エントリー可能性も含めて返却する。
+
+|submitTeamEntry
+|SubmitTeamEntryRequestDto, Long clubId, Long userId
+|SubmitTeamEntryResponseDto
+|チームエントリーを申請し、主催者の承認待ち状態で登録する。
+|===
+
+=== 実装クラス
+
+`TournamentParticipationServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentRepository
+|TournamentRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+
+|tournamentTeamEntryRepository
+|TournamentTeamEntryRepository
+|エントリー管理に使用
+
+|participationPermissionService
+|ParticipationPermissionService
+|権限チェックに使用
+
+|participationNotificationService
+|ParticipationNotificationService
+|通知送信に使用
+
+|clubRepository
+|ClubRepository
+|クラブ情報取得に使用
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== 処理詳細
+
+==== searchTournaments
+
+|===
+|順序 |概要 |詳細
+
+|1
+|クラブ管理者権限確認
+|* `participationPermissionService.validateClubAdminPermission(userId, clubId)` でクラブ管理者権限を確認
+
+|2
+|検索条件の補完
+|* excludeOwn が true の場合、自クラブ主催大会を除外  
+* ステータスが未指定の場合、ENTRY_OPEN のみに限定
+
+|3
+|大会検索実行
+|* `tournamentRepository.searchTournaments(searchCriteria, pageable)` で大会を検索  
+* ページネーション対応
+
+|4
+|エントリー可能性判定
+|各大会について以下をチェック：  
+* エントリー締切日が未来かどうか  
+* 参加上限に達していないかどうか  
+* 既にエントリー済みでないかどうか  
+* 結果を `canEntry` と `isAlreadyEntered` フラグに設定
+
+|5
+|利用可能フィルター生成
+|検索結果に基づいて、利用可能な以下のフィルター選択肢を生成：  
+* 大会種別の選択肢  
+* 開催月の選択肢  
+* 主催地域の選択肢（将来拡張）
+
+|6
+|レスポンス生成
+|TournamentSearchResponseDto に以下の情報を設定して返却：  
+* tournaments: 検索結果（ページネーション）  
+* searchCriteria: 適用された検索条件  
+* availableFilters: 利用可能なフィルター選択肢
+|===
+
+==== submitTeamEntry
+
+|===
+|順序 |概要 |詳細
+
+|1
+|基本情報取得・検証
+|* `tournamentRepository.findById(tournamentId)` で大会情報を取得  
+* 大会が存在しない場合は `TournamentNotFoundException` をスロー → `MSG_PTC_0008`
+
+|2
+|権限・期限確認
+|* `participationPermissionService.validateClubAdminPermission(userId, clubId)` で管理者権限を確認  
+* `participationPermissionService.validateEntryDeadline(tournamentId)` でエントリー締切を確認
+
+|3
+|重複エントリー確認
+|* `tournamentTeamEntryRepository.existsByClubIdAndTournamentId(clubId, tournamentId)` で重複をチェック  
+* 既にエントリー済みの場合は `DuplicateEntryException` をスロー → `MSG_PTC_0010`
+
+|4
+|参加上限確認
+|* 大会に参加上限が設定されている場合：  
+** `tournamentTeamEntryRepository.countApprovedEntries(tournamentId)` で承認済み数を取得  
+** 上限に達している場合は `ParticipantLimitException` をスロー → `MSG_PTC_0011`
+
+|5
+|エントリーエンティティ作成
+|* TournamentTeamEntryEntity を生成し、以下の値をセット：  
+** tournamentId: 対象大会ID  
+** clubId: 申請クラブID  
+** teamName: チーム名  
+** status: EntryStatus.PENDING（申請中）  
+** appliedAt: 現在日時  
+** comment: 申請コメント  
+** createdBy: 申請ユーザーID  
+** createdAt, updatedAt: 現在日時
+
+|6
+|エントリー登録
+|* `tournamentTeamEntryRepository.insertEntry(entryEntity)` でエントリーをDBに登録  
+* 自動採番されたIDが `entryEntity.id` に格納される
+
+|7
+|通知送信
+|* `participationNotificationService.notifyEntrySubmitted(entryEntity.id)` で主催者と申請クラブに通知
+
+|8
+|次ステップ生成
+|申請完了後に実行可能なアクション一覧を生成：  
+* "選手を登録する"  
+* "エントリー内容を確認する"  
+* "申請をキャンセルする"
+
+|9
+|レスポンス生成
+|SubmitTeamEntryResponseDto に以下の情報を設定して返却：  
+* entryId: 作成されたエントリーID  
+* tournament: 大会情報  
+* teamEntry: 作成されたエントリー情報  
+* nextSteps: 次ステップ一覧  
+* message: "エントリー申請を送信しました。主催者の承認をお待ちください。"
+
+|–
+|エラー処理
+|* トランザクション内でエラーが発生した場合はロールバック  
+* 各種例外をスローし、エラーメッセージを返す
+|===
+
+== Repository定義
+
+=== TournamentRepository（追加メソッド）
+
+共通定義に加えて、以下のメソッドを使用：
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|searchTournaments
+|TournamentSearchCriteria, Pageable
+|Page<TournamentSearchDto>
+|条件に応じた大会検索（エントリー可能性判定含む）
+
+|getAvailableFilters
+|TournamentSearchCriteria
+|SearchFiltersDto
+|検索結果に基づく利用可能フィルター選択肢を取得
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 大会検索
+
+[source,sql]
+----
+SELECT 
+    t.id,
+    t.name,
+    t.event_date,
+    t.entry_deadline,
+    t.tournament_type,
+    t.status,
+    t.max_participants,
+    c.name as host_club_name,
+    COUNT(te.id) as current_participants,
+    CASE 
+        WHEN t.entry_deadline >= CURDATE() 
+         AND t.status = 'ENTRY_OPEN'
+         AND (t.max_participants IS NULL OR COUNT(te.id) < t.max_participants)
+        THEN true 
+        ELSE false 
+    END as can_entry,
+    EXISTS(
+        SELECT 1 FROM tournament_team_entries te2 
+        WHERE te2.tournament_id = t.id 
+          AND te2.club_id = #{clubId}
+          AND te2.status != 'WITHDRAWN'
+    ) as is_already_entered
+FROM tournaments t
+JOIN clubs c ON t.host_club_id = c.id
+LEFT JOIN tournament_team_entries te ON t.id = te.tournament_id AND te.status = 'APPROVED'
+WHERE 1=1
+  AND (#{keyword} IS NULL OR t.name LIKE CONCAT('%', #{keyword}, '%') OR c.name LIKE CONCAT('%', #{keyword}, '%'))
+  AND (#{eventDateFrom} IS NULL OR t.event_date >= #{eventDateFrom})
+  AND (#{eventDateTo} IS NULL OR t.event_date <= #{eventDateTo})
+  AND (#{tournamentType} IS NULL OR t.tournament_type = #{tournamentType})
+  AND (#{status} IS NULL OR t.status = #{status})
+  AND (#{excludeOwn} = false OR t.host_club_id != #{clubId})
+GROUP BY t.id, t.name, t.event_date, t.entry_deadline, t.tournament_type, t.status, t.max_participants, c.name
+ORDER BY t.event_date ASC, t.name ASC
+LIMIT #{limit} OFFSET #{offset}
+----
+
+==== 重複エントリーチェック
+
+[source,sql]
+----
+SELECT COUNT(*) > 0
+FROM tournament_team_entries
+WHERE tournament_id = #{tournamentId}
+  AND club_id = #{clubId}
+  AND status != 'WITHDRAWN'
+----
+
+== 通知機能
+
+=== エントリー申請通知
+
+==== 主催者への通知
+
+* **件名**: 「【剣道大会管理システム】新しいエントリー申請があります」
+* **内容**: 大会名、申請クラブ名、申請日時、承認用リンク
+* **送信方法**: アプリ内通知 + メール通知
+
+==== 申請クラブへの確認通知
+
+* **件名**: 「【剣道大会管理システム】エントリー申請を受け付けました」
+* **内容**: 大会名、申請日時、次ステップ（選手登録）の案内
+* **送信方法**: アプリ内通知 + メール通知
+
+== フロントエンド連携
+
+=== 大会検索UI
+
+* **検索フィルター**: キーワード、開催日範囲、大会種別、ステータス
+* **検索結果表示**: 一覧形式でエントリー可能性を明示
+* **ページネーション**: 大量の検索結果に対応
+* **詳細表示**: 大会詳細とエントリー状況の確認
+
+=== エントリー申請フロー
+
+1. **大会検索・選択**: 参加したい大会を検索・選択
+2. **チーム名入力**: 自由入力でチーム名を設定
+3. **申請確認**: 大会詳細とエントリー内容の最終確認
+4. **申請送信**: 主催者への申請送信
+5. **次ステップ案内**: 選手登録等の次に実行すべきアクション
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== 大会検索リクエスト
+```
+GET /api/participation/tournaments/search?keyword=東京&eventDateFrom=2024-03-01&page=0&size=10
+Authorization: Bearer {jwt-token}
+```
+
+==== 大会検索レスポンス
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "tournaments": {
+        "content": [
+            {
+                "id": 123,
+                "name": "第15回 東京剣道クラブ杯",
+                "hostClubName": "東京剣道クラブ",
+                "eventDate": "2024-03-15",
+                "entryDeadline": "2024-03-08",
+                "tournamentType": "TEAM",
+                "status": "ENTRY_OPEN",
+                "currentParticipants": 8,
+                "maxParticipants": 32,
+                "canEntry": true,
+                "isAlreadyEntered": false
+            }
+        ],
+        "totalElements": 1,
+        "number": 0,
+        "size": 10
+    },
+    "availableFilters": {
+        "tournamentTypes": ["TEAM", "INDIVIDUAL"],
+        "eventMonths": ["2024-03", "2024-04"]
+    }
+}
+```
+
+==== エントリー申請リクエスト
+```json
+POST /api/participation/entries
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "tournamentId": 123,
+    "teamName": "大阪剣道クラブA",
+    "comment": "よろしくお願いいたします。"
+}
+```
+
+==== エントリー申請レスポンス
+```json
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{
+    "entryId": 456,
+    "tournament": {
+        "id": 123,
+        "name": "第15回 東京剣道クラブ杯",
+        "eventDate": "2024-03-15"
+    },
+    "teamEntry": {
+        "id": 456,
+        "teamName": "大阪剣道クラブA",
+        "status": "PENDING",
+        "appliedAt": "2024-01-15T10:30:00",
+        "canEdit": true,
+        "canWithdraw": true
+    },
+    "nextSteps": [
+        "選手を登録する",
+        "エントリー内容を確認する",
+        "申請をキャンセルする"
+    ],
+    "message": "エントリー申請を送信しました。主催者の承認をお待ちください。"
+}
+```

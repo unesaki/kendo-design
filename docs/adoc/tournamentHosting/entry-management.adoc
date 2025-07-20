@@ -1,0 +1,663 @@
+= エントリー受付管理API 詳細設計書
+
+== 概要
+
+manageEntryRequestsApi
+
+大会主催者が他クラブからの参加申請を承認・拒否するAPI。
+エントリー状況の確認から個別の承認・拒否処理まで一連の受付管理機能を提供する。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[大会主催管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== ProcessEntryRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|entryId
+|Long
+|@NotNull
+|処理対象のエントリーID
+
+|action
+|EntryAction
+|@NotNull
+|実行アクション（APPROVE/REJECT）
+
+|comment
+|String
+|@Size(max=500)
+|処理理由（任意）
+|===
+
+==== ProcessEntryResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|entryId
+|Long
+|処理されたエントリーID
+
+|action
+|EntryAction
+|実行されたアクション
+
+|applicantClub
+|ClubDto
+|申請クラブ情報
+
+|tournament
+|TournamentDto
+|対象大会情報
+
+|processedAt
+|LocalDateTime
+|処理日時
+
+|message
+|String
+|処理完了メッセージ
+|===
+
+==== EntryListRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|tournamentId
+|Long
+|@NotNull
+|大会ID
+
+|status
+|EntryStatus
+|
+|フィルター対象ステータス（任意）
+
+|page
+|Integer
+|@Min(0)
+|ページ番号（デフォルト：0）
+
+|size
+|Integer
+|@Min(1), @Max(100)
+|ページサイズ（デフォルト：20）
+|===
+
+==== EntryListResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|entries
+|Page<TournamentEntryDto>
+|エントリー一覧（ページネーション）
+
+|tournament
+|TournamentDto
+|対象大会情報
+
+|summary
+|EntrySummaryDto
+|エントリー状況サマリー
+|===
+
+==== EntrySummaryDto
+
+|===
+|フィールド名 |型 |説明
+
+|totalEntries
+|Integer
+|総エントリー数
+
+|pendingCount
+|Integer
+|未処理エントリー数
+
+|approvedCount
+|Integer
+|承認済みエントリー数
+
+|rejectedCount
+|Integer
+|拒否済みエントリー数
+
+|maxParticipants
+|Integer
+|参加上限数（制限なしの場合はnull）
+
+|availableSlots
+|Integer
+|残り受付可能数（制限なしの場合はnull）
+|===
+
+=== Enum定義
+
+==== EntryAction
+
+|===
+|値 |説明
+
+|APPROVE
+|承認（参加を許可）
+
+|REJECT
+|拒否（参加を不許可）
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|entryIdがnullの場合
+|エントリーIDは必須です。
+|MSG_SYS_0005
+|400
+
+|2
+|actionがnullの場合
+|アクションは必須です。
+|MSG_SYS_0005
+|400
+
+|3
+|commentが500文字を超える場合
+|コメントは500文字以内で入力してください。
+|MSG_TRN_0019
+|400
+
+|4
+|指定されたエントリーが存在しない場合
+|指定されたエントリーが見つかりません。
+|MSG_TRN_0012
+|404
+
+|5
+|エントリーが既に処理済みの場合
+|このエントリーは既に処理済みです。
+|MSG_TRN_0020
+|409
+
+|6
+|大会主催者権限がない場合
+|この大会の主催者ではありません。
+|MSG_TRN_0009
+|403
+
+|7
+|エントリー受付期間外の場合
+|エントリー受付期間外です。
+|MSG_TRN_0013
+|409
+
+|8
+|参加上限に達している場合（承認時）
+|参加上限に達しています。
+|MSG_TRN_0015
+|409
+
+|9
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TournamentController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentService
+|TournamentService
+|大会管理処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/tournaments"), @RequiredArgsConstructor
+
+|メソッド（一覧取得）
+|@GetMapping("/{tournamentId}/entries")
+
+|メソッド（処理実行）
+|@PutMapping("/entries/{entryId}")
+
+|引数
+|@PathVariable, @RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+* `getEntryList` - エントリー一覧取得
+* `processEntryRequest` - エントリー処理実行
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|getEntryList
+|ResponseEntity<EntryListResponseDto>
+|エントリー一覧と状況サマリーを返却
+
+|processEntryRequest
+|ResponseEntity<ProcessEntryResponseDto>
+|処理成功時に結果情報を返却
+|===
+
+=== 処理詳細
+
+==== getEntryList
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|パスパラメータから大会ID、クエリパラメータからフィルター条件とページング情報を取得。
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーの ID（userId）を取得する。
+
+|3
+|サービス呼び出し
+|`tournamentService.getEntryList(tournamentId, requestDto, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `EntryListResponseDto` を `ResponseEntity.ok().body(...)` にラップして返却する。
+|===
+
+==== processEntryRequest
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|パスパラメータからエントリーID、リクエストボディからアクションとコメントを取得。
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーの ID（userId）を取得する。
+
+|3
+|サービス呼び出し
+|`tournamentService.processEntryRequest(entryId, requestDto, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `ProcessEntryResponseDto` を `ResponseEntity.ok().body(...)` にラップして返却する。
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TournamentService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|getEntryList
+|Long tournamentId, EntryListRequestDto, Long userId
+|EntryListResponseDto
+|指定大会のエントリー一覧と状況を取得する。
+
+|processEntryRequest
+|Long entryId, ProcessEntryRequestDto, Long userId
+|ProcessEntryResponseDto
+|エントリーを承認または拒否し、適切な処理を実行する。
+|===
+
+=== 実装クラス
+
+`TournamentServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentRepository
+|TournamentRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+
+|tournamentEntryRepository
+|TournamentEntryRepository
+|エントリー管理に使用
+
+|tournamentPermissionService
+|TournamentPermissionService
+|権限チェックに使用
+
+|tournamentNotificationService
+|TournamentNotificationService
+|通知送信に使用
+
+|clubRepository
+|ClubRepository
+|クラブ情報取得に使用
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== 処理詳細
+
+==== getEntryList
+
+|===
+|順序 |概要 |詳細
+
+|1
+|大会情報取得・権限確認
+|* `tournamentRepository.findById(tournamentId)` で大会情報を取得  
+* `tournamentPermissionService.validateTournamentHostPermission(userId, tournamentId)` で主催者権限を確認
+
+|2
+|エントリー一覧取得
+|* `tournamentEntryRepository.findByTournamentId(tournamentId, status, pageable)` でエントリー一覧を取得  
+* ステータスフィルターとページネーションを適用
+
+|3
+|状況サマリー生成
+|* `tournamentEntryRepository.getEntrySummary(tournamentId)` でエントリー状況を集計  
+* 承認済み・未処理・拒否済みの各件数を取得
+
+|4
+|レスポンス生成
+|EntryListResponseDto に以下の情報を設定して返却：  
+* entries: エントリー一覧（ページネーション）  
+* tournament: 大会情報  
+* summary: エントリー状況サマリー
+|===
+
+==== processEntryRequest
+
+|===
+|順序 |概要 |詳細
+
+|1
+|エントリー情報取得
+|* `tournamentEntryRepository.findByIdWithDetails(entryId)` でエントリー詳細を取得  
+* 存在しない場合は `EntryNotFoundException` をスロー → `MSG_TRN_0012`
+
+|2
+|エントリー状態確認
+|* entry.status が PENDING 以外の場合は `AlreadyProcessedException` をスロー → `MSG_TRN_0020`
+
+|3
+|主催者権限確認
+|* `tournamentPermissionService.validateTournamentHostPermission(userId, entry.tournamentId)` で権限を確認
+
+|4
+|受付期間確認
+|* 大会のステータスが ENTRY_OPEN でない場合は `EntryPeriodExpiredException` をスロー → `MSG_TRN_0013`
+
+|5
+|承認処理（action = APPROVE）
+|==== 5-1. 参加上限チェック ====  
+* maxParticipants が設定されている場合：  
+** `tournamentEntryRepository.countApprovedEntries(tournamentId)` で承認済み数を取得  
+** 上限に達している場合は `ParticipantLimitExceededException` をスロー → `MSG_TRN_0015`  
+
+==== 5-2. エントリーステータス更新 ====  
+* `tournamentEntryRepository.updateEntryStatus(entryId, APPROVED, userId)` でステータス更新  
+
+==== 5-3. 承認通知 ====  
+* `tournamentNotificationService.notifyEntryApproved(entryId)` で申請クラブに通知
+
+|6
+|拒否処理（action = REJECT）
+|==== 6-1. エントリーステータス更新 ====  
+* `tournamentEntryRepository.updateEntryStatus(entryId, REJECTED, userId)` でステータス更新  
+
+==== 6-2. 拒否通知 ====  
+* `tournamentNotificationService.notifyEntryRejected(entryId)` で申請クラブに通知
+
+|7
+|レスポンス生成
+|ProcessEntryResponseDto に以下の情報を設定して返却：  
+* entryId: 処理されたエントリーID  
+* action: 実行されたアクション  
+* applicantClub: 申請クラブ情報  
+* tournament: 対象大会情報  
+* processedAt: 処理日時  
+* message: 承認時「エントリーを承認しました。」/ 拒否時「エントリーを拒否しました。」
+
+|–
+|エラー処理
+|* トランザクション内でエラーが発生した場合はロールバック  
+* 各種例外をスローし、エラーメッセージを返す
+|===
+
+== Repository定義
+
+=== TournamentEntryRepository（追加メソッド）
+
+共通定義に加えて、以下のメソッドを使用：
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findByTournamentId
+|Long tournamentId, EntryStatus status, Pageable
+|Page<TournamentEntryDto>
+|大会のエントリー一覧をページングで取得
+
+|findByIdWithDetails
+|Long entryId
+|Optional<TournamentEntryWithDetailsDto>
+|エントリー詳細（大会・クラブ情報含む）を取得
+
+|updateEntryStatus
+|Long entryId, EntryStatus status, Long processedBy
+|void
+|エントリーステータスと処理者を更新
+
+|getEntrySummary
+|Long tournamentId
+|EntrySummaryDto
+|エントリー状況のサマリーを取得
+
+|countApprovedEntries
+|Long tournamentId
+|Integer
+|承認済みエントリー数を取得
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== エントリー一覧取得
+
+[source,sql]
+----
+SELECT 
+    e.id,
+    e.tournament_id,
+    e.club_id,
+    e.team_name,
+    e.status,
+    e.applied_at,
+    e.processed_at,
+    e.comment,
+    c.name as club_name
+FROM tournament_entries e
+JOIN clubs c ON e.club_id = c.id
+WHERE e.tournament_id = #{tournamentId}
+  AND (#{status} IS NULL OR e.status = #{status})
+ORDER BY e.applied_at DESC
+LIMIT #{limit} OFFSET #{offset}
+----
+
+==== エントリーステータス更新
+
+[source,sql]
+----
+UPDATE tournament_entries
+SET status = #{status},
+    processed_at = NOW(),
+    processed_by = #{processedBy},
+    updated_at = NOW()
+WHERE id = #{entryId}
+----
+
+==== エントリー状況サマリー
+
+[source,sql]
+----
+SELECT 
+    COUNT(*) as total_entries,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending_count,
+    COUNT(CASE WHEN status = 'approved' THEN 1 END) as approved_count,
+    COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected_count
+FROM tournament_entries
+WHERE tournament_id = #{tournamentId}
+----
+
+== 通知機能
+
+=== 承認時の通知
+
+申請クラブの管理者に以下の内容で通知を送信：
+
+* **件名**: 「【剣道大会管理システム】大会エントリーが承認されました」
+* **内容**: 大会名、承認日時、今後の流れ（選手登録等）
+* **送信方法**: アプリ内通知 + メール通知
+
+=== 拒否時の通知
+
+申請クラブの管理者に以下の内容で通知を送信：
+
+* **件名**: 「【剣道大会管理システム】大会エントリーについて」
+* **内容**: 大会名、拒否理由（コメントがあれば）、再申請可能の案内
+* **送信方法**: アプリ内通知 + メール通知
+
+== 管理画面機能
+
+=== エントリー管理ダッシュボード
+
+主催者は以下の情報でエントリー状況を確認可能：
+
+* **状況サマリー**: 総数・未処理・承認済み・拒否済みの件数
+* **参加上限状況**: 現在の参加者数と残り受付可能数
+* **エントリー一覧**: 申請クラブ・日時・状況の一覧表示
+* **一括処理**: 複数エントリーの一括承認・拒否（将来拡張）
+
+=== フィルター・検索機能
+
+* **ステータス別表示**: 未処理・承認済み・拒否済みでフィルター
+* **申請日順**: 最新・古い順での並び替え
+* **クラブ名検索**: 特定クラブのエントリーを検索
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== エントリー一覧取得
+```
+GET /api/tournaments/123/entries?status=PENDING&page=0&size=20
+Authorization: Bearer {jwt-token}
+```
+
+==== エントリー一覧レスポンス
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "entries": {
+        "content": [
+            {
+                "id": 456,
+                "tournamentId": 123,
+                "clubId": 2,
+                "clubName": "大阪剣道クラブ",
+                "teamName": "大阪A",
+                "status": "PENDING",
+                "appliedAt": "2024-01-15T14:30:00"
+            }
+        ],
+        "totalElements": 5,
+        "totalPages": 1,
+        "number": 0,
+        "size": 20
+    },
+    "tournament": {
+        "id": 123,
+        "name": "第15回 東京剣道クラブ杯",
+        "maxParticipants": 32
+    },
+    "summary": {
+        "totalEntries": 5,
+        "pendingCount": 3,
+        "approvedCount": 2,
+        "rejectedCount": 0,
+        "maxParticipants": 32,
+        "availableSlots": 30
+    }
+}
+```
+
+==== エントリー承認リクエスト
+```json
+PUT /api/tournaments/entries/456
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "action": "APPROVE",
+    "comment": "参加を歓迎します。"
+}
+```
+
+==== エントリー承認レスポンス
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "entryId": 456,
+    "action": "APPROVE",
+    "applicantClub": {
+        "id": 2,
+        "name": "大阪剣道クラブ"
+    },
+    "tournament": {
+        "id": 123,
+        "name": "第15回 東京剣道クラブ杯"
+    },
+    "processedAt": "2024-01-15T16:45:00",
+    "message": "エントリーを承認しました。"
+}
+```

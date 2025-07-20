@@ -9,97 +9,11 @@ createTeamMatchRecordApi
 
 == Bean定義
 
-=== Entity定義
+=== 共通定義の参照
 
-==== TeamMatchRecordEntity
+基本的なEntity、Dto、エラーメッセージについては link:../common-definitions.adoc[記録管理機能 共通定義] を参照すること。
 
-|===
-|フィールド名 |型 |説明
-
-|id
-|Long
-|団体戦記録ID（自動採番）
-
-|userId
-|Long
-|記録登録ユーザーID
-
-|clubId
-|Long
-|現在選択中クラブID（クラブ公開の場合のみ）
-
-|tournamentName
-|String
-|大会名
-
-|matchDate
-|LocalDate
-|試合日
-
-|round
-|String
-|ラウンド（例：準決勝）
-
-|redTeamName
-|String
-|赤チーム名
-
-|whiteTeamName
-|String
-|白チーム名
-
-|visibility
-|String
-|公開設定（PRIVATE または CLUB）
-
-|createdAt
-|LocalDateTime
-|登録日時
-
-|updatedAt
-|LocalDateTime
-|更新日時
-|===
-
-==== TeamMatchMemberEntity
-
-|===
-|フィールド名 |型 |説明
-
-|recordId
-|Long
-|団体戦記録ID（TeamMatchRecordEntity.id）
-
-|teamColor
-|String
-|チーム色（RED または WHITE）
-
-|position
-|String
-|ポジション（先鋒〜大将）
-
-|playerName
-|String
-|選手名
-
-|scores
-|String
-|スコア（カンマ区切りで最大2つ）
-
-|hasPenalty
-|Boolean
-|▲（反則）が含まれる場合 true
-
-|createdAt
-|LocalDateTime
-|作成日時
-
-|updatedAt
-|LocalDateTime
-|更新日時
-|===
-
-=== Dto定義
+=== 専用Dto定義
 
 ==== TeamMatchRegisterRequestDto
 
@@ -142,8 +56,8 @@ createTeamMatchRecordApi
 |白チーム選手情報（先鋒〜大将）
 
 |visibility
-|String
-|@Pattern(regexp = "^(PRIVATE|CLUB)$")
+|RecordVisibility
+|@NotNull
 |公開設定（PRIVATEまたはCLUB）
 |===
 
@@ -163,9 +77,9 @@ createTeamMatchRecordApi
 |選手名
 
 |scores
-|List<String>
-|@Size(max=2)
-|スコア（例：["メ", "▲"]）
+|List<ScoreType>
+|@Size(max=2), @ValidScores
+|スコア（例：[MEN, PENALTY]）
 |===
 
 === バリデーションエラー一覧

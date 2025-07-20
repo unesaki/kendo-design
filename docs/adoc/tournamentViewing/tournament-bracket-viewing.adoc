@@ -1,0 +1,1256 @@
+= トーナメント表閲覧API 詳細設計書
+
+== 概要
+
+tournamentBracketViewingApi
+
+指定された大会のトーナメント表を閲覧するAPI。
+対戦組み合わせ、進行状況、試合結果をビジュアルに表示するためのデータを提供し、リアルタイム更新にも対応する。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[大会閲覧機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== TournamentBracketRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|tournamentId
+|Long
+|@NotNull
+|大会ID
+
+|roundFilter
+|Integer
+|@Min(1)
+|特定ラウンドのみ取得（null=全ラウンド）
+
+|includeResults
+|Boolean
+|
+|試合結果を含む（デフォルト：true）
+
+|includeDetails
+|Boolean
+|
+|詳細情報を含む（デフォルト：false）
+
+|format
+|BracketFormat
+|
+|表示形式（TREE/GRID/LINEAR）
+
+|lastUpdateTime
+|LocalDateTime
+|
+|最終更新時刻（差分更新用）
+|===
+
+==== TournamentBracketResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|tournamentId
+|Long
+|大会ID
+
+|tournamentName
+|String
+|大会名
+
+|bracketInfo
+|BracketInfoDto
+|トーナメント表基本情報
+
+|bracketStructure
+|BracketStructureDto
+|トーナメント構造情報
+
+|matches
+|List<BracketMatchDto>
+|試合一覧
+
+|rounds
+|List<RoundDto>
+|ラウンド情報
+
+|participants
+|List<BracketParticipantDto>
+|参加者情報
+
+|progressStatus
+|BracketProgressDto
+|進行状況
+
+|viewOptions
+|BracketViewOptionsDto
+|表示オプション
+
+|lastUpdated
+|LocalDateTime
+|最終更新日時
+
+|nextUpdate
+|LocalDateTime
+|次回更新予定時刻
+|===
+
+==== BracketInfoDto
+
+|===
+|フィールド名 |型 |説明
+
+|matchFormat
+|MatchFormat
+|対戦形式
+
+|totalRounds
+|Integer
+|総ラウンド数
+
+|totalMatches
+|Integer
+|総試合数
+
+|participantCount
+|Integer
+|参加者数
+
+|bracketType
+|BracketType
+|トーナメント種別
+
+|seedingMethod
+|SeedingMethod
+|シード方法
+
+|isPublic
+|Boolean
+|公開フラグ
+
+|isCompleted
+|Boolean
+|完了フラグ
+
+|estimatedDuration
+|String
+|予想所要時間
+
+|currentPhase
+|String
+|現在のフェーズ
+|===
+
+==== BracketStructureDto
+
+|===
+|フィールド名 |型 |説明
+
+|layout
+|BracketLayoutType
+|レイアウト種別
+
+|dimensions
+|BracketDimensionsDto
+|表示サイズ情報
+
+|nodePositions
+|List<NodePositionDto>
+|ノード位置情報
+
+|connections
+|List<ConnectionDto>
+|接続線情報
+
+|regions
+|List<RegionDto>
+|領域情報（準決勝ブロック等）
+
+|displaySettings
+|DisplaySettingsDto
+|表示設定
+|===
+
+==== BracketMatchDto
+
+|===
+|フィールド名 |型 |説明
+
+|matchId
+|Long
+|試合ID
+
+|bracketId
+|Long
+|ブラケットID
+
+|round
+|Integer
+|ラウンド番号
+
+|roundName
+|String
+|ラウンド名
+
+|matchNumber
+|Integer
+|試合番号
+
+|position
+|PositionDto
+|表示位置
+
+|redEntry
+|BracketEntryDto
+|赤エントリー
+
+|whiteEntry
+|BracketEntryDto
+|白エントリー
+
+|result
+|BracketMatchResultDto
+|試合結果（公開済みの場合のみ）
+
+|status
+|MatchStatus
+|試合状況
+
+|scheduledTime
+|LocalDateTime
+|予定時刻
+
+|actualStartTime
+|LocalDateTime
+|実際の開始時刻
+
+|estimatedEndTime
+|LocalDateTime
+|予想終了時刻
+
+|venue
+|String
+|試合会場
+
+|referee
+|String
+|審判員
+
+|canViewResult
+|Boolean
+|結果閲覧可能フラグ
+
+|nextMatchId
+|Long
+|次の試合ID
+
+|isHighlighted
+|Boolean
+|ハイライト表示フラグ
+|===
+
+==== BracketEntryDto
+
+|===
+|フィールド名 |型 |説明
+
+|entryId
+|Long
+|エントリーID
+
+|name
+|String
+|エントリー名
+
+|displayName
+|String
+|表示名
+
+|shortName
+|String
+|短縮名
+
+|clubName
+|String
+|所属クラブ名
+
+|seed
+|Integer
+|シード番号
+
+|currentScore
+|Integer
+|現在のスコア
+
+|isWinner
+|Boolean
+|勝利フラグ
+
+|advancement
+|AdvancementStatus
+|進出状況
+
+|playerInfo
+|List<PlayerInfoDto>
+|選手情報（団体戦の場合）
+
+|statistics
+|EntryStatisticsDto
+|統計情報
+
+|icon
+|String
+|アイコンURL
+
+|color
+|String
+|表示色
+|===
+
+==== RoundDto
+
+|===
+|フィールド名 |型 |説明
+
+|roundNumber
+|Integer
+|ラウンド番号
+
+|roundName
+|String
+|ラウンド名
+
+|matchCount
+|Integer
+|試合数
+
+|completedCount
+|Integer
+|完了試合数
+
+|scheduledStartTime
+|LocalDateTime
+|開始予定時刻
+
+|actualStartTime
+|LocalDateTime
+|実際の開始時刻
+
+|estimatedEndTime
+|LocalDateTime
+|終了予定時刻
+
+|status
+|RoundStatus
+|ラウンド状況
+
+|participantCount
+|Integer
+|参加者数
+
+|isCurrentRound
+|Boolean
+|現在のラウンドフラグ
+|===
+
+=== Enum定義
+
+==== BracketFormat
+
+|===
+|値 |説明
+
+|TREE
+|ツリー形式（従来型）
+
+|GRID
+|グリッド形式
+
+|LINEAR
+|直線形式
+
+|COMPACT
+|コンパクト形式
+|===
+
+==== BracketType
+
+|===
+|値 |説明
+
+|SINGLE_ELIMINATION
+|シングルエリミネーション
+
+|DOUBLE_ELIMINATION
+|ダブルエリミネーション
+
+|ROUND_ROBIN
+|総当たり
+
+|SWISS
+|スイス式
+
+|CUSTOM
+|カスタム
+|===
+
+==== SeedingMethod
+
+|===
+|値 |説明
+
+|RANDOM
+|ランダム
+
+|RANKING
+|ランキング順
+
+|GEOGRAPHIC
+|地域別
+
+|BALANCED
+|バランス調整
+
+|MANUAL
+|手動
+|===
+
+==== AdvancementStatus
+
+|===
+|値 |説明
+
+|ACTIVE
+|現役（まだ試合中）
+
+|ADVANCED
+|勝ち上がり
+
+|ELIMINATED
+|敗退
+
+|BYE
+|シード（不戦勝）
+|===
+
+==== RoundStatus
+
+|===
+|値 |説明
+
+|PENDING
+|未開始
+
+|IN_PROGRESS
+|進行中
+
+|COMPLETED
+|完了
+
+|SUSPENDED
+|中断
+
+|CANCELLED
+|中止
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|tournamentIdがnullの場合
+|大会IDは必須です。
+|MSG_VIEW_0012
+|400
+
+|2
+|roundFilterが1未満の場合
+|ラウンド番号は1以上で指定してください。
+|MSG_VIEW_0014
+|400
+
+|3
+|指定された大会が見つからない場合
+|指定された大会が見つかりません。
+|MSG_VIEW_0005
+|404
+
+|4
+|トーナメント表が公開されていない場合
+|トーナメント表は公開されていません。
+|MSG_VIEW_0007
+|403
+
+|5
+|トーナメント表が作成されていない場合
+|トーナメント表がまだ作成されていません。
+|MSG_VIEW_0015
+|404
+
+|6
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TournamentBracketController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentBracketService
+|TournamentBracketService
+|トーナメント表閲覧処理を行うサービス。`@RequiredArgsConstructor` によりインジェクション。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/tournaments/{tournamentId}/bracket"), @RequiredArgsConstructor
+
+|メソッド（トーナメント表取得）
+|@GetMapping
+
+|メソッド（特定ラウンド取得）
+|@GetMapping("/rounds/{roundNumber}")
+
+|メソッド（差分更新）
+|@GetMapping("/updates")
+
+|メソッド（リアルタイム接続）
+|@MessageMapping("/bracket/{tournamentId}")
+
+|引数
+|@PathVariable, @RequestParam, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+* `getTournamentBracket` - トーナメント表取得
+* `getRoundBracket` - 特定ラウンド取得
+* `getBracketUpdates` - 差分更新取得
+* `subscribeToUpdates` - リアルタイム更新購読（WebSocket）
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|getTournamentBracket
+|ResponseEntity<TournamentBracketResponseDto>
+|トーナメント表全体を返却
+
+|getRoundBracket
+|ResponseEntity<RoundBracketDto>
+|特定ラウンドの詳細を返却
+
+|getBracketUpdates
+|ResponseEntity<BracketUpdateDto>
+|最終更新以降の差分を返却
+
+|subscribeToUpdates
+|void
+|WebSocket接続でリアルタイム更新
+|===
+
+=== 処理詳細
+
+==== getTournamentBracket
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|パスパラメータから大会ID、クエリパラメータから表示オプションを取得。
+
+|2
+|ユーザー情報取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーIDを取得する（任意）。
+
+|3
+|権限確認
+|tournamentViewPermissionService.validateBracketAccess() でトーナメント表閲覧権限を確認。
+
+|4
+|サービス呼び出し
+|tournamentBracketService.getTournamentBracket(tournamentId, requestDto, userId) を呼び出す。
+
+|5
+|キャッシュヘッダー設定
+|適切なキャッシュヘッダーを設定（進行中の大会は短時間キャッシュ）。
+
+|6
+|レスポンス生成
+|トーナメント表データを含む TournamentBracketResponseDto を返却する。
+
+|–
+|エラー処理
+|* 大会が見つからない場合は MSG_VIEW_0005 を返却  
+* トーナメント表が公開されていない場合は MSG_VIEW_0007 を返却  
+* トーナメント表が未作成の場合は MSG_VIEW_0015 を返却
+|===
+
+==== getBracketUpdates
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|最終更新時刻をクエリパラメータから取得。
+
+|2
+|差分データ取得
+|lastUpdateTime以降の変更データのみを取得。
+
+|3
+|レスポンス生成
+|差分データを効率的な形式で返却。
+|===
+
+==== subscribeToUpdates
+
+|===
+|順序 |概要 |詳細
+
+|1
+|WebSocket接続確立
+|クライアントとのWebSocket接続を確立。
+
+|2
+|権限確認
+|リアルタイム更新の権限を確認。
+
+|3
+|更新通知登録
+|大会の試合結果更新時に通知を受けるよう登録。
+
+|4
+|リアルタイム配信
+|試合結果が更新されるたびにクライアントに配信。
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TournamentBracketService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|getTournamentBracket
+|Long tournamentId, TournamentBracketRequestDto, Long userId
+|TournamentBracketResponseDto
+|トーナメント表全体を取得・構築する
+
+|getRoundBracket
+|Long tournamentId, Integer roundNumber, Long userId
+|RoundBracketDto
+|特定ラウンドの詳細を取得する
+
+|getBracketUpdates
+|Long tournamentId, LocalDateTime since, Long userId
+|BracketUpdateDto
+|指定時刻以降の更新を取得する
+
+|generateBracketStructure
+|Long tournamentId, BracketFormat format
+|BracketStructureDto
+|表示用のトーナメント構造を生成する
+
+|calculateBracketPositions
+|List<BracketMatchDto>, BracketFormat format
+|List<NodePositionDto>
+|各ノードの表示位置を計算する
+|===
+
+=== 実装クラス
+
+`TournamentBracketServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentBracketRepository
+|TournamentBracketRepository
+|トーナメント表データ取得用リポジトリ
+
+|bracketLayoutService
+|BracketLayoutService
+|レイアウト計算用サービス
+
+|bracketCacheService
+|BracketCacheService
+|キャッシュ管理用サービス
+
+|realTimeUpdateService
+|RealTimeUpdateService
+|リアルタイム更新用サービス
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor
+|===
+
+=== 処理詳細
+
+==== getTournamentBracket
+
+|===
+|順序 |概要 |詳細
+
+|1
+|基本情報取得・権限確認
+|* tournamentBracketRepository.findBracketByTournamentId() でトーナメント表データを取得  
+* トーナメント表が存在しない場合は `BracketNotFoundException` をスロー → `MSG_VIEW_0015`  
+* 公開設定を確認し、非公開の場合は `BracketNotPublicException` をスロー → `MSG_VIEW_0007`
+
+|2
+|キャッシュ確認
+|* bracketCacheService.getCachedBracket() でキャッシュを確認  
+* 有効なキャッシュがある場合はそのまま返却
+
+|3
+|参加者情報取得
+|* 全参加者の基本情報を取得  
+* シード情報、現在の勝敗状況を含む
+
+|4
+|試合情報取得
+|* 全試合の詳細情報を取得  
+* includeResults が true かつ権限がある場合、試合結果も含む
+
+|5
+|ラウンド情報構築
+|* ラウンドごとの試合数、完了状況を計算  
+* 現在進行中のラウンドを特定
+
+|6
+|トーナメント構造生成
+|* generateBracketStructure() で表示用構造を生成  
+* 指定されたフォーマット（TREE/GRID/LINEAR）に応じてレイアウトを計算
+
+|7
+|位置情報計算
+|* calculateBracketPositions() で各ノードの表示位置を計算  
+* 画面サイズや表示密度を考慮
+
+|8
+|進行状況計算
+|* 全体の進行率、現在のフェーズを計算  
+* 次の試合予定、推定終了時刻を算出
+
+|9
+|表示オプション設定
+|* ユーザーの権限に応じて表示オプションを設定  
+* 結果表示レベル、詳細情報の表示可否等
+
+|10
+|キャッシュ更新
+|* 生成したデータをキャッシュに保存  
+* 進行中の大会は短時間キャッシュ
+
+|11
+|レスポンス生成
+|TournamentBracketResponseDto に以下の情報を設定して返却：  
+* tournamentId, tournamentName: 基本情報  
+* bracketInfo: トーナメント表基本情報  
+* bracketStructure: 構造・レイアウト情報  
+* matches: 試合一覧  
+* rounds: ラウンド情報  
+* participants: 参加者情報  
+* progressStatus: 進行状況  
+* viewOptions: 表示オプション  
+* lastUpdated: 最終更新時刻
+
+|–
+|エラー処理
+|* 各種例外をスローし、エラーメッセージを返す  
+* 部分的な情報取得エラーは警告ログ出力後、利用可能な情報のみで継続
+|===
+
+==== generateBracketStructure
+
+|===
+|順序 |概要 |詳細
+
+|1
+|フォーマット別レイアウト選択
+|* TREE: 従来の階層型レイアウト  
+* GRID: グリッド型レイアウト  
+* LINEAR: 直線型レイアウト  
+* COMPACT: コンパクト表示
+
+|2
+|参加者数・ラウンド数に応じた最適化
+|* 参加者数に応じて表示サイズを調整  
+* 画面サイズに収まるよう自動スケーリング
+
+|3
+|ノード配置計算
+|* 各試合ノードの座標を計算  
+* 接続線の経路を最適化
+
+|4
+|表示領域分割
+|* 準決勝ブロック、決勝ブロック等の領域を定義  
+* ラウンド別の表示領域を設定
+
+|5
+|構造データ生成
+|BracketStructureDto を生成して返却
+|===
+
+==== getBracketUpdates
+
+|===
+|順序 |概要 |詳細
+
+|1
+|更新差分取得
+|* 指定時刻以降に更新された試合結果を取得  
+* 新規に開始された試合、完了した試合を特定
+
+|2
+|影響範囲計算
+|* 更新された試合が影響する範囲を計算  
+* 次ラウンドへの進出者変更等を含む
+
+|3
+|差分データ構築
+|* 最小限の更新データのみを構築  
+* クライアント側での効率的な更新を考慮
+
+|4
+|レスポンス生成
+|BracketUpdateDto として差分データを返却
+|===
+
+== Repository定義
+
+=== 使用メソッド
+
+==== TournamentBracketRepository（拡張）
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findBracketWithDetails
+|Long tournamentId, Long userId
+|Optional<TournamentBracketDto>
+|権限を考慮したトーナメント表を取得
+
+|findMatchesByRound
+|Long tournamentId, Integer round, Long userId
+|List<BracketMatchDto>
+|特定ラウンドの試合一覧を取得
+
+|findBracketUpdates
+|Long tournamentId, LocalDateTime since
+|List<BracketUpdateDto>
+|更新差分を取得
+
+|calculateBracketStatistics
+|Long tournamentId
+|BracketStatisticsDto
+|トーナメント表の統計情報を計算
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== トーナメント表取得
+
+[source,sql]
+----
+-- 基本的なトーナメント表構造
+SELECT 
+    b.id as bracket_id,
+    b.round,
+    b.match_number,
+    b.position,
+    b.red_entry_id,
+    b.white_entry_id,
+    b.status,
+    b.scheduled_at,
+    -- 赤エントリー情報
+    red_te.team_name as red_name,
+    red_c.name as red_club_name,
+    red_te.seed as red_seed,
+    -- 白エントリー情報
+    white_te.team_name as white_name,
+    white_c.name as white_club_name,
+    white_te.seed as white_seed,
+    -- 試合結果（公開済みの場合のみ）
+    CASE WHEN mr.is_public = true OR #{userId} IS NOT NULL AND EXISTS (
+        SELECT 1 FROM club_members cm 
+        WHERE cm.club_id = t.host_club_id AND cm.user_id = #{userId}
+    ) THEN mr.winner ELSE NULL END as winner,
+    CASE WHEN mr.is_public = true OR #{userId} IS NOT NULL AND EXISTS (
+        SELECT 1 FROM club_members cm 
+        WHERE cm.club_id = t.host_club_id AND cm.user_id = #{userId}
+    ) THEN mr.red_score ELSE NULL END as red_score,
+    CASE WHEN mr.is_public = true OR #{userId} IS NOT NULL AND EXISTS (
+        SELECT 1 FROM club_members cm 
+        WHERE cm.club_id = t.host_club_id AND cm.user_id = #{userId}
+    ) THEN mr.white_score ELSE NULL END as white_score,
+    mr.recorded_at,
+    mr.published_at
+FROM tournament_brackets b
+JOIN tournaments t ON b.tournament_id = t.id
+LEFT JOIN tournament_team_entries red_te ON b.red_entry_id = red_te.id
+LEFT JOIN clubs red_c ON red_te.club_id = red_c.id
+LEFT JOIN tournament_team_entries white_te ON b.white_entry_id = white_te.id
+LEFT JOIN clubs white_c ON white_te.club_id = white_c.id
+LEFT JOIN match_results mr ON b.id = mr.bracket_id
+WHERE b.tournament_id = #{tournamentId}
+  AND t.is_bracket_public = true
+ORDER BY b.round, b.match_number
+----
+
+==== ラウンド別情報取得
+
+[source,sql]
+----
+SELECT 
+    round,
+    CASE round
+        WHEN 1 THEN '1回戦'
+        WHEN 2 THEN '2回戦'
+        WHEN (SELECT MAX(round) FROM tournament_brackets WHERE tournament_id = #{tournamentId}) THEN '決勝'
+        WHEN (SELECT MAX(round) - 1 FROM tournament_brackets WHERE tournament_id = #{tournamentId}) THEN '準決勝'
+        ELSE CONCAT(round, '回戦')
+    END as round_name,
+    COUNT(*) as match_count,
+    COUNT(mr.id) as completed_count,
+    MIN(b.scheduled_at) as round_start_time,
+    MAX(mr.recorded_at) as round_end_time,
+    CASE 
+        WHEN COUNT(mr.id) = 0 THEN 'PENDING'
+        WHEN COUNT(mr.id) = COUNT(*) THEN 'COMPLETED'
+        ELSE 'IN_PROGRESS'
+    END as round_status
+FROM tournament_brackets b
+LEFT JOIN match_results mr ON b.id = mr.bracket_id
+WHERE b.tournament_id = #{tournamentId}
+GROUP BY round
+ORDER BY round
+----
+
+==== 更新差分取得
+
+[source,sql]
+----
+SELECT 
+    b.id as bracket_id,
+    b.round,
+    b.match_number,
+    mr.winner,
+    mr.red_score,
+    mr.white_score,
+    mr.recorded_at,
+    'RESULT_UPDATED' as update_type
+FROM tournament_brackets b
+JOIN match_results mr ON b.id = mr.bracket_id
+WHERE b.tournament_id = #{tournamentId}
+  AND mr.updated_at > #{since}
+  AND mr.is_public = true
+
+UNION ALL
+
+SELECT 
+    b.id as bracket_id,
+    b.round,
+    b.match_number,
+    NULL as winner,
+    NULL as red_score,
+    NULL as white_score,
+    b.updated_at as recorded_at,
+    'MATCH_STARTED' as update_type
+FROM tournament_brackets b
+WHERE b.tournament_id = #{tournamentId}
+  AND b.status = 'IN_PROGRESS'
+  AND b.updated_at > #{since}
+
+ORDER BY recorded_at DESC
+----
+
+== BracketLayoutService定義
+
+トーナメント表のレイアウト計算を行う専用サービス
+
+=== メソッド定義
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|calculateTreeLayout
+|List<BracketMatchDto>, Integer width, Integer height
+|List<NodePositionDto>
+|ツリー形式のレイアウトを計算
+
+|calculateGridLayout
+|List<BracketMatchDto>, Integer columns
+|List<NodePositionDto>
+|グリッド形式のレイアウトを計算
+
+|calculateLinearLayout
+|List<BracketMatchDto>, String direction
+|List<NodePositionDto>
+|直線形式のレイアウトを計算
+
+|optimizeConnections
+|List<NodePositionDto>
+|List<ConnectionDto>
+|ノード間の接続線を最適化
+
+|calculateViewport
+|List<NodePositionDto>
+|ViewportDto
+|表示領域のサイズを計算
+|===
+
+== リアルタイム更新
+
+=== WebSocket実装
+
+```javascript
+// クライアント側接続例
+const socket = new WebSocket('/ws/tournaments/123/bracket');
+
+socket.onmessage = function(event) {
+    const update = JSON.parse(event.data);
+    updateBracketDisplay(update);
+};
+
+function updateBracketDisplay(update) {
+    switch(update.type) {
+        case 'MATCH_RESULT':
+            updateMatchResult(update.matchId, update.result);
+            break;
+        case 'MATCH_START':
+            highlightMatch(update.matchId);
+            break;
+        case 'ROUND_COMPLETE':
+            moveToNextRound();
+            break;
+    }
+}
+```
+
+=== 更新イベント種別
+
+* **MATCH_RESULT**: 試合結果更新
+* **MATCH_START**: 試合開始
+* **MATCH_POSTPONED**: 試合延期
+* **ROUND_COMPLETE**: ラウンド完了
+* **BRACKET_STRUCTURE_CHANGE**: トーナメント構造変更
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== トーナメント表取得リクエスト
+
+```
+GET /api/tournaments/123/bracket?format=TREE&includeResults=true&includeDetails=false
+Authorization: Bearer {jwt-token}
+```
+
+==== トーナメント表取得レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+Cache-Control: max-age=180
+
+{
+    "tournamentId": 123,
+    "tournamentName": "第30回 全日本剣道選手権大会",
+    "bracketInfo": {
+        "matchFormat": "TOURNAMENT",
+        "totalRounds": 4,
+        "totalMatches": 15,
+        "participantCount": 16,
+        "bracketType": "SINGLE_ELIMINATION",
+        "seedingMethod": "RANKING",
+        "isPublic": true,
+        "isCompleted": false,
+        "currentPhase": "準決勝"
+    },
+    "bracketStructure": {
+        "layout": "TREE",
+        "dimensions": {
+            "width": 1200,
+            "height": 800,
+            "nodeWidth": 150,
+            "nodeHeight": 60
+        },
+        "nodePositions": [
+            {
+                "matchId": 1,
+                "x": 100,
+                "y": 100,
+                "width": 150,
+                "height": 60
+            }
+        ],
+        "connections": [
+            {
+                "fromMatchId": 1,
+                "toMatchId": 9,
+                "path": "M250,130 L350,130 L350,230 L400,230"
+            }
+        ]
+    },
+    "matches": [
+        {
+            "matchId": 1,
+            "bracketId": 1,
+            "round": 1,
+            "roundName": "1回戦",
+            "matchNumber": 1,
+            "position": {"x": 100, "y": 100},
+            "redEntry": {
+                "entryId": 456,
+                "name": "東京剣道クラブA",
+                "displayName": "東京A",
+                "clubName": "東京剣道クラブ",
+                "seed": 1,
+                "currentScore": 2,
+                "isWinner": true,
+                "advancement": "ADVANCED"
+            },
+            "whiteEntry": {
+                "entryId": 457,
+                "name": "大阪剣道クラブB",
+                "displayName": "大阪B",
+                "clubName": "大阪剣道クラブ",
+                "seed": 16,
+                "currentScore": 1,
+                "isWinner": false,
+                "advancement": "ELIMINATED"
+            },
+            "result": {
+                "id": 1,
+                "resultType": "TEAM",
+                "winner": "red",
+                "redScore": 2,
+                "whiteScore": 1,
+                "duration": "45分",
+                "recordedAt": "2024-03-15T10:45:00",
+                "publishedAt": "2024-03-15T10:50:00"
+            },
+            "status": "COMPLETED",
+            "scheduledTime": "2024-03-15T10:00:00",
+            "actualStartTime": "2024-03-15T10:05:00",
+            "venue": "Aコート",
+            "canViewResult": true,
+            "nextMatchId": 9
+        }
+    ],
+    "rounds": [
+        {
+            "roundNumber": 1,
+            "roundName": "1回戦",
+            "matchCount": 8,
+            "completedCount": 8,
+            "scheduledStartTime": "2024-03-15T10:00:00",
+            "actualStartTime": "2024-03-15T10:05:00",
+            "estimatedEndTime": "2024-03-15T12:00:00",
+            "status": "COMPLETED",
+            "participantCount": 16,
+            "isCurrentRound": false
+        },
+        {
+            "roundNumber": 4,
+            "roundName": "決勝",
+            "matchCount": 1,
+            "completedCount": 0,
+            "scheduledStartTime": "2024-03-15T15:00:00",
+            "status": "PENDING",
+            "participantCount": 2,
+            "isCurrentRound": false
+        }
+    ],
+    "progressStatus": {
+        "currentRound": 3,
+        "completedMatches": 14,
+        "totalMatches": 15,
+        "progressPercentage": 93,
+        "estimatedTimeRemaining": "30分",
+        "nextScheduledMatch": {
+            "matchId": 15,
+            "roundName": "決勝",
+            "scheduledTime": "2024-03-15T15:00:00"
+        }
+    },
+    "viewOptions": {
+        "canViewResults": true,
+        "canViewDetails": true,
+        "showSeeds": true,
+        "showClubNames": true,
+        "highlightCurrentRound": true
+    },
+    "lastUpdated": "2024-03-15T14:30:00",
+    "nextUpdate": "2024-03-15T15:00:00"
+}
+```
+
+==== 差分更新取得リクエスト
+
+```
+GET /api/tournaments/123/bracket/updates?since=2024-03-15T14:00:00
+Authorization: Bearer {jwt-token}
+```
+
+==== 差分更新レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "updates": [
+        {
+            "type": "MATCH_RESULT",
+            "matchId": 14,
+            "result": {
+                "winner": "red",
+                "redScore": 2,
+                "whiteScore": 0
+            },
+            "timestamp": "2024-03-15T14:25:00",
+            "affectedMatches": [15]
+        }
+    ],
+    "lastUpdateTime": "2024-03-15T14:30:00",
+    "hasMoreUpdates": false
+}
+```

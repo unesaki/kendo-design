@@ -1,0 +1,887 @@
+= 大会一覧閲覧API 詳細設計書
+
+== 概要
+
+tournamentListViewingApi
+
+公開中の大会一覧を検索・閲覧するAPI。
+ユーザーはログイン状態に関係なく、公開設定された大会の一覧を検索・フィルタリング・ソートして閲覧できる。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[大会閲覧機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== TournamentListRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|keyword
+|String
+|@Size(max=100)
+|検索キーワード（大会名、主催クラブ名等）
+
+|tournamentType
+|TournamentType
+|
+|大会種別フィルター
+
+|status
+|TournamentStatus
+|
+|ステータスフィルター
+
+|dateFrom
+|LocalDate
+|
+|開催日範囲（開始）
+
+|dateTo
+|LocalDate
+|@DateRange
+|開催日範囲（終了）
+
+|hostClubName
+|String
+|@Size(max=50)
+|主催クラブ名フィルター
+
+|venue
+|String
+|@Size(max=100)
+|開催会場フィルター
+
+|hasResults
+|Boolean
+|
+|結果公開済みフィルター
+
+|includeCompleted
+|Boolean
+|
+|終了大会を含む（デフォルト：true）
+
+|includeFuture
+|Boolean
+|
+|未来大会を含む（デフォルト：true）
+
+|sortBy
+|TournamentSortType
+|
+|ソート方法（デフォルト：EVENT_DATE_ASC）
+
+|page
+|Integer
+|@Min(0)
+|ページ番号（デフォルト：0）
+
+|size
+|Integer
+|@Min(1), @Max(100)
+|ページサイズ（デフォルト：20）
+|===
+
+==== TournamentListResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|tournaments
+|Page<TournamentListDto>
+|大会一覧（ページネーション）
+
+|searchCriteria
+|TournamentListRequestDto
+|適用された検索条件
+
+|filterOptions
+|TournamentFilterOptionsDto
+|利用可能なフィルター選択肢
+
+|summary
+|TournamentListSummaryDto
+|検索結果サマリー
+
+|featuredTournaments
+|List<TournamentListDto>
+|注目大会一覧（上位3件）
+
+|recentTournaments
+|List<TournamentListDto>
+|最近の大会一覧（上位5件）
+|===
+
+==== TournamentFilterOptionsDto
+
+|===
+|フィールド名 |型 |説明
+
+|availableTypes
+|List<TournamentTypeOption>
+|利用可能な大会種別
+
+|availableStatuses
+|List<TournamentStatusOption>
+|利用可能なステータス
+
+|availableClubs
+|List<ClubOption>
+|主催クラブ一覧
+
+|availableVenues
+|List<VenueOption>
+|開催会場一覧
+
+|dateRange
+|DateRangeDto
+|大会開催日の範囲
+
+|participantRange
+|ParticipantRangeDto
+|参加者数の範囲
+|===
+
+==== TournamentListSummaryDto
+
+|===
+|フィールド名 |型 |説明
+
+|totalTournaments
+|Long
+|総大会数
+
+|upcomingCount
+|Long
+|開催予定大会数
+
+|ongoingCount
+|Long
+|開催中大会数
+
+|completedCount
+|Long
+|完了大会数
+
+|popularClubs
+|List<String>
+|人気主催クラブ（上位5件）
+
+|popularVenues
+|List<String>
+|人気会場（上位5件）
+
+|averageParticipants
+|Double
+|平均参加者数
+
+|monthlyDistribution
+|Map<String, Integer>
+|月別大会数分布
+|===
+
+=== カスタムバリデーション定義
+
+==== @DateRange
+
+日付範囲バリデーション
+
+|===
+|検証項目 |ルール |エラーメッセージID
+
+|開始日≦終了日
+|dateFrom <= dateTo
+|MSG_VIEW_0002
+
+|範囲制限
+|期間は1年以内
+|MSG_VIEW_0011
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|keywordが100文字を超える場合
+|検索キーワードは100文字以内で入力してください。
+|MSG_VIEW_0001
+|400
+
+|2
+|dateFromがdateToより後の場合
+|開始日は終了日より前の日付を指定してください。
+|MSG_VIEW_0002
+|400
+
+|3
+|pageが負の値の場合
+|ページ番号は0以上で指定してください。
+|MSG_VIEW_0003
+|400
+
+|4
+|sizeが1未満または100を超える場合
+|ページサイズは1から100の間で指定してください。
+|MSG_VIEW_0004
+|400
+
+|5
+|日付範囲が1年を超える場合
+|検索期間は1年以内で指定してください。
+|MSG_VIEW_0011
+|400
+
+|6
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TournamentViewController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentViewService
+|TournamentViewService
+|大会閲覧処理を行うサービス。`@RequiredArgsConstructor` によりインジェクション。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/tournaments"), @RequiredArgsConstructor
+
+|メソッド（大会一覧取得）
+|@GetMapping
+
+|メソッド（フィルター選択肢取得）
+|@GetMapping("/filters")
+
+|メソッド（注目大会取得）
+|@GetMapping("/featured")
+
+|引数
+|@RequestParam, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+* `getTournamentList` - 大会一覧取得
+* `getFilterOptions` - フィルター選択肢取得
+* `getFeaturedTournaments` - 注目大会取得
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|getTournamentList
+|ResponseEntity<TournamentListResponseDto>
+|検索結果と統計情報を返却
+
+|getFilterOptions
+|ResponseEntity<TournamentFilterOptionsDto>
+|利用可能なフィルター選択肢を返却
+
+|getFeaturedTournaments
+|ResponseEntity<List<TournamentListDto>>
+|注目大会一覧を返却
+|===
+
+=== 処理詳細
+
+==== getTournamentList
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|検索条件をクエリパラメータから TournamentListRequestDto として受け取る。
+
+|2
+|ユーザー情報取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーIDを取得する（任意：未ログインユーザーも可）。
+
+|3
+|デフォルト値設定
+|未指定のパラメータにデフォルト値を設定：  
+* page = 0  
+* size = 20  
+* sortBy = EVENT_DATE_ASC  
+* includeCompleted = true  
+* includeFuture = true
+
+|4
+|サービス呼び出し
+|tournamentViewService.searchTournaments(requestDto, userId) を呼び出す。
+
+|5
+|レスポンス生成
+|検索結果と統計情報を含む TournamentListResponseDto を返却する。
+
+|–
+|エラー処理
+|* バリデーションエラー時は適切なメッセージIDを返却  
+* 予期しない例外発生時は MSG_SYS_0003 を返却
+|===
+
+==== getFilterOptions
+
+|===
+|順序 |概要 |詳細
+
+|1
+|ユーザー情報取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーIDを取得する（任意）。
+
+|2
+|サービス呼び出し
+|tournamentViewService.getFilterOptions(userId) を呼び出す。
+
+|3
+|レスポンス生成
+|利用可能なフィルター選択肢を返却する。
+|===
+
+==== getFeaturedTournaments
+
+|===
+|順序 |概要 |詳細
+
+|1
+|ユーザー情報取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーIDを取得する（任意）。
+
+|2
+|サービス呼び出し
+|tournamentViewService.getFeaturedTournaments(userId) を呼び出す。
+
+|3
+|レスポンス生成
+|注目大会一覧を返却する。
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TournamentViewService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|searchTournaments
+|TournamentListRequestDto, Long userId
+|TournamentListResponseDto
+|条件に応じた大会検索を行い、統計情報も含めて返却する
+
+|getFilterOptions
+|Long userId
+|TournamentFilterOptionsDto
+|利用可能なフィルター選択肢を取得する
+
+|getFeaturedTournaments
+|Long userId
+|List<TournamentListDto>
+|注目大会一覧を取得する
+
+|getRecentTournaments
+|Long userId, Integer limit
+|List<TournamentListDto>
+|最近の大会一覧を取得する
+
+|getTournamentStatistics
+|TournamentListRequestDto, Long userId
+|TournamentListSummaryDto
+|検索結果の統計情報を計算する
+|===
+
+=== 実装クラス
+
+`TournamentViewServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentViewRepository
+|TournamentViewRepository
+|大会検索用リポジトリ
+
+|tournamentViewPermissionService
+|TournamentViewPermissionService
+|権限チェック用サービス
+
+|tournamentCacheService
+|TournamentCacheService
+|キャッシュ管理用サービス
+
+|tournamentStatisticsService
+|TournamentStatisticsService
+|統計計算用サービス
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor
+|===
+
+=== 処理詳細
+
+==== searchTournaments
+
+|===
+|順序 |概要 |詳細
+
+|1
+|検索条件の正規化
+|* デフォルト値の設定  
+* 日付範囲の妥当性チェック  
+* 文字列の前後空白除去
+
+|2
+|権限フィルタリング条件構築
+|* 公開大会（visibility=PUBLIC）は常に含める  
+* ログイン済みの場合：  
+** クラブ限定大会でそのクラブのメンバーの場合は含める  
+** 地域限定大会でその地域のユーザーの場合は含める（将来拡張）
+
+|3
+|キャッシュ確認
+|* tournamentCacheService.getCachedTournamentList() でキャッシュを確認  
+* キャッシュヒットした場合はそのまま返却
+
+|4
+|大会検索実行
+|* tournamentViewRepository.searchTournaments(searchCriteria, userId, pageable) で大会を検索  
+* 権限フィルタリングを適用
+
+|5
+|閲覧権限の詳細チェック
+|* 各大会について tournamentViewPermissionService.canViewTournament() で詳細権限をチェック  
+* canView フラグを設定
+
+|6
+|進行状況計算
+|* 各大会の進行率を計算（完了試合数/総試合数）  
+* progressPercentage を設定
+
+|7
+|統計情報計算
+|* tournamentStatisticsService.calculateListSummary() で統計情報を算出  
+* 総大会数、ステータス別件数、人気主催クラブ等
+
+|8
+|注目大会・最近の大会取得
+|* getFeaturedTournaments() で注目大会を取得  
+* getRecentTournaments() で最近の大会を取得
+
+|9
+|フィルター選択肢取得
+|* getFilterOptions() で利用可能なフィルター選択肢を取得
+
+|10
+|キャッシュ更新
+|* 検索結果をキャッシュに保存
+
+|11
+|レスポンス生成
+|TournamentListResponseDto に以下の情報を設定して返却：  
+* tournaments: 検索結果（ページネーション）  
+* searchCriteria: 適用された検索条件  
+* filterOptions: 利用可能なフィルター選択肢  
+* summary: 統計情報  
+* featuredTournaments: 注目大会一覧  
+* recentTournaments: 最近の大会一覧
+
+|–
+|エラー処理
+|* バリデーションエラーは適切な例外をスロー  
+* 検索エラーは ログ出力後、部分的な結果を返却
+|===
+
+==== getFilterOptions
+
+|===
+|順序 |概要 |詳細
+
+|1
+|基本選択肢取得
+|* tournamentViewRepository.getFilterOptions(userId) で基本的なフィルター選択肢を取得
+
+|2
+|権限フィルタリング
+|* ユーザーの権限に応じてフィルター選択肢をフィルタリング  
+* 閲覧権限のない大会種別や主催クラブは除外
+
+|3
+|統計情報付加
+|* 各選択肢に件数情報を付加  
+* 日付範囲や参加者数範囲の統計を計算
+
+|4
+|レスポンス生成
+|TournamentFilterOptionsDto を返却
+|===
+
+==== getFeaturedTournaments
+
+|===
+|順序 |概要 |詳細
+
+|1
+|注目度算出
+|* 参加者数、エントリー数、アクセス数等から注目度を算出  
+* 開催が近い大会に重み付け
+
+|2
+|注目大会抽出
+|* 注目度の高い順に上位3件を抽出  
+* 権限チェックを適用
+
+|3
+|詳細情報付加
+|* 各大会の詳細情報を付加  
+* 進行状況や結果公開状況を確認
+
+|4
+|レスポンス生成
+|注目大会一覧を返却
+|===
+
+== Repository定義
+
+=== 使用メソッド
+
+共通定義に加えて、以下のメソッドを使用：
+
+==== TournamentViewRepository（拡張）
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|searchTournamentsWithStatistics
+|TournamentSearchCriteriaDto, Long userId, Pageable
+|TournamentListWithStatsDto
+|統計情報付きの大会検索
+
+|findFeaturedTournaments
+|Long userId, Integer limit
+|List<TournamentListDto>
+|注目大会一覧を取得
+
+|findRecentTournaments
+|Long userId, Integer limit
+|List<TournamentListDto>
+|最近の大会一覧を取得
+
+|calculateTournamentStats
+|TournamentSearchCriteriaDto, Long userId
+|TournamentListSummaryDto
+|検索条件に応じた統計情報を計算
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 大会一覧検索
+
+[source,sql]
+----
+SELECT 
+    t.id,
+    t.name,
+    t.event_date,
+    t.tournament_type,
+    t.status,
+    t.venue,
+    c.name as host_club_name,
+    COUNT(DISTINCT te.id) as current_participants,
+    t.max_participants,
+    CASE 
+        WHEN t.visibility = 'PUBLIC' THEN true
+        WHEN t.visibility = 'CLUB_ONLY' AND #{userId} IS NOT NULL 
+         AND EXISTS (
+            SELECT 1 FROM club_members cm 
+            WHERE cm.club_id = t.host_club_id AND cm.user_id = #{userId}
+         ) THEN true
+        ELSE false
+    END as can_view,
+    EXISTS (
+        SELECT 1 FROM match_results mr 
+        WHERE mr.tournament_id = t.id AND mr.is_public = true
+    ) as has_results,
+    CASE 
+        WHEN t.status = 'COMPLETED' THEN 100
+        WHEN t.status = 'IN_PROGRESS' THEN 
+            COALESCE(
+                (SELECT COUNT(*) * 100 / NULLIF(COUNT(DISTINCT b.id), 0)
+                 FROM tournament_brackets b 
+                 LEFT JOIN match_results mr ON b.id = mr.bracket_id
+                 WHERE b.tournament_id = t.id AND mr.id IS NOT NULL), 0
+            )
+        ELSE 0
+    END as progress_percentage
+FROM tournaments t
+JOIN clubs c ON t.host_club_id = c.id
+LEFT JOIN tournament_team_entries te ON t.id = te.tournament_id AND te.status = 'APPROVED'
+WHERE 1=1
+  AND t.is_public = true
+  AND (#{keyword} IS NULL OR 
+       t.name LIKE CONCAT('%', #{keyword}, '%') OR 
+       c.name LIKE CONCAT('%', #{keyword}, '%') OR
+       t.venue LIKE CONCAT('%', #{keyword}, '%'))
+  AND (#{tournamentType} IS NULL OR t.tournament_type = #{tournamentType})
+  AND (#{status} IS NULL OR t.status = #{status})
+  AND (#{dateFrom} IS NULL OR t.event_date >= #{dateFrom})
+  AND (#{dateTo} IS NULL OR t.event_date <= #{dateTo})
+  AND (#{hostClubName} IS NULL OR c.name LIKE CONCAT('%', #{hostClubName}, '%'))
+  AND (#{venue} IS NULL OR t.venue LIKE CONCAT('%', #{venue}, '%'))
+  AND (#{hasResults} IS NULL OR 
+       (#{hasResults} = true AND EXISTS (
+          SELECT 1 FROM match_results mr WHERE mr.tournament_id = t.id AND mr.is_public = true
+       )) OR
+       (#{hasResults} = false AND NOT EXISTS (
+          SELECT 1 FROM match_results mr WHERE mr.tournament_id = t.id AND mr.is_public = true
+       )))
+  AND (#{includeCompleted} = true OR t.status != 'COMPLETED')
+  AND (#{includeFuture} = true OR t.event_date <= CURDATE())
+GROUP BY t.id, t.name, t.event_date, t.tournament_type, t.status, t.venue, c.name, t.max_participants
+ORDER BY 
+  CASE #{sortBy}
+    WHEN 'EVENT_DATE_ASC' THEN t.event_date
+    WHEN 'EVENT_DATE_DESC' THEN t.event_date
+    WHEN 'NAME_ASC' THEN t.name
+    WHEN 'CREATED_DESC' THEN t.created_at
+    WHEN 'PARTICIPANTS_DESC' THEN current_participants
+    ELSE t.event_date
+  END ${sortDirection}
+LIMIT #{limit} OFFSET #{offset}
+----
+
+==== 注目大会算出
+
+[source,sql]
+----
+SELECT 
+    t.*,
+    c.name as host_club_name,
+    COUNT(DISTINCT te.id) as current_participants,
+    (
+        -- 注目度スコア計算
+        (COUNT(DISTINCT te.id) * 2) +  -- 参加者数
+        (DATEDIFF(t.event_date, CURDATE()) * -0.1) +  -- 開催日の近さ
+        (COALESCE(tv.view_count, 0) * 0.1)  -- アクセス数
+    ) as featured_score
+FROM tournaments t
+JOIN clubs c ON t.host_club_id = c.id
+LEFT JOIN tournament_team_entries te ON t.id = te.tournament_id AND te.status = 'APPROVED'
+LEFT JOIN tournament_views tv ON t.id = tv.tournament_id
+WHERE t.is_public = true
+  AND t.status IN ('ENTRY_OPEN', 'IN_PROGRESS')
+  AND t.event_date >= CURDATE()
+GROUP BY t.id
+ORDER BY featured_score DESC
+LIMIT #{limit}
+----
+
+==== 統計情報計算
+
+[source,sql]
+----
+SELECT 
+    COUNT(*) as total_tournaments,
+    COUNT(CASE WHEN t.status = 'ENTRY_OPEN' AND t.event_date > CURDATE() THEN 1 END) as upcoming_count,
+    COUNT(CASE WHEN t.status = 'IN_PROGRESS' THEN 1 END) as ongoing_count,
+    COUNT(CASE WHEN t.status = 'COMPLETED' THEN 1 END) as completed_count,
+    AVG(participant_counts.current_participants) as average_participants
+FROM tournaments t
+LEFT JOIN (
+    SELECT 
+        te.tournament_id,
+        COUNT(*) as current_participants
+    FROM tournament_team_entries te
+    WHERE te.status = 'APPROVED'
+    GROUP BY te.tournament_id
+) participant_counts ON t.id = participant_counts.tournament_id
+WHERE t.is_public = true
+  AND (適用される検索条件)
+----
+
+== TournamentStatisticsService定義
+
+大会統計計算を行う専用サービス
+
+=== メソッド定義
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|calculateListSummary
+|TournamentSearchCriteriaDto, Long userId
+|TournamentListSummaryDto
+|検索結果の統計サマリーを計算
+
+|calculateFeaturedScore
+|Long tournamentId
+|Double
+|注目度スコアを計算
+
+|getMonthlyDistribution
+|TournamentSearchCriteriaDto, Long userId
+|Map<String, Integer>
+|月別大会数分布を取得
+
+|getPopularClubs
+|TournamentSearchCriteriaDto, Long userId, Integer limit
+|List<String>
+|人気主催クラブを取得
+
+|getPopularVenues
+|TournamentSearchCriteriaDto, Long userId, Integer limit
+|List<String>
+|人気会場を取得
+|===
+
+== キャッシュ戦略
+
+=== キャッシュ対象
+
+* **大会一覧**: 検索条件ごとにキャッシュ（TTL: 5分）
+* **フィルター選択肢**: 日次更新（TTL: 24時間）
+* **注目大会**: 頻繁更新（TTL: 3分）
+* **統計情報**: 中頻度更新（TTL: 15分）
+
+=== キャッシュキー設計
+
+```
+tournament:list:{hash(searchCriteria)}:{userId}
+tournament:filters:{userId}
+tournament:featured:{userId}
+tournament:stats:{hash(searchCriteria)}:{userId}
+```
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== 大会一覧取得リクエスト
+
+```
+GET /api/tournaments?keyword=剣道&tournamentType=TEAM&dateFrom=2024-01-01&sortBy=EVENT_DATE_ASC&page=0&size=10
+Authorization: Bearer {jwt-token}
+```
+
+==== 大会一覧取得レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "tournaments": {
+        "content": [
+            {
+                "id": 123,
+                "name": "第30回 全日本剣道選手権大会",
+                "hostClubName": "東京剣道連盟",
+                "eventDate": "2024-03-15",
+                "tournamentType": "TEAM",
+                "status": "ENTRY_OPEN",
+                "currentParticipants": 16,
+                "maxParticipants": 32,
+                "venue": "東京武道館",
+                "canView": true,
+                "hasResults": false,
+                "progressPercentage": 0
+            }
+        ],
+        "totalElements": 1,
+        "number": 0,
+        "size": 10
+    },
+    "searchCriteria": {
+        "keyword": "剣道",
+        "tournamentType": "TEAM",
+        "dateFrom": "2024-01-01",
+        "sortBy": "EVENT_DATE_ASC",
+        "page": 0,
+        "size": 10
+    },
+    "filterOptions": {
+        "availableTypes": [
+            {"value": "TEAM", "label": "団体戦", "count": 25},
+            {"value": "INDIVIDUAL", "label": "個人戦", "count": 15}
+        ],
+        "availableStatuses": [
+            {"value": "ENTRY_OPEN", "label": "エントリー受付中", "count": 10},
+            {"value": "IN_PROGRESS", "label": "開催中", "count": 5}
+        ],
+        "availableClubs": [
+            {"name": "東京剣道連盟", "count": 8},
+            {"name": "大阪剣道クラブ", "count": 6}
+        ],
+        "dateRange": {
+            "earliest": "2024-01-01",
+            "latest": "2024-12-31"
+        }
+    },
+    "summary": {
+        "totalTournaments": 1,
+        "upcomingCount": 1,
+        "ongoingCount": 0,
+        "completedCount": 0,
+        "popularClubs": ["東京剣道連盟", "大阪剣道クラブ"],
+        "averageParticipants": 16.0,
+        "monthlyDistribution": {
+            "2024-03": 1
+        }
+    },
+    "featuredTournaments": [
+        {
+            "id": 123,
+            "name": "第30回 全日本剣道選手権大会",
+            "hostClubName": "東京剣道連盟",
+            "eventDate": "2024-03-15",
+            "currentParticipants": 16
+        }
+    ],
+    "recentTournaments": []
+}
+```
+
+==== フィルター選択肢取得リクエスト
+
+```
+GET /api/tournaments/filters
+Authorization: Bearer {jwt-token}
+```
+
+==== 注目大会取得リクエスト
+
+```
+GET /api/tournaments/featured
+Authorization: Bearer {jwt-token}
+```

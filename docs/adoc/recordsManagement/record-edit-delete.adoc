@@ -1,0 +1,866 @@
+= 記録編集・削除API 詳細設計書
+
+== 概要
+
+recordEditAndDeleteApi
+
+ユーザーが登録した個人戦・団体戦記録の編集・削除機能を提供するAPI。
+プライベート記録は直接編集・削除可能、クラブ公開記録は申請制により管理者承認後に実行される。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[記録管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== RecordEditRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|recordType
+|RecordType
+|@NotNull
+|記録種別（PERSONAL, TEAM）
+
+|recordId
+|Long
+|@NotNull
+|対象記録ID
+
+|editType
+|EditRequestType
+|@NotNull
+|編集種別（EDIT, DELETE）
+
+|personalMatchData
+|PersonalMatchRegisterRequestDto
+|@Valid
+|個人戦記録の新しい内容（個人戦編集時のみ）
+
+|teamMatchData
+|TeamMatchRegisterRequestDto
+|@Valid
+|団体戦記録の新しい内容（団体戦編集時のみ）
+
+|reason
+|String
+|@NotBlank, @Size(max=500)
+|編集・削除理由
+
+|urgentFlag
+|Boolean
+|
+|緊急対応フラグ（デフォルト：false）
+
+|notifyClub
+|Boolean
+|
+|クラブ通知フラグ（デフォルト：true）
+|===
+
+==== RecordEditResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|requestId
+|Long
+|編集申請ID（申請制の場合のみ）
+
+|recordId
+|Long
+|対象記録ID
+
+|editType
+|EditRequestType
+|編集種別
+
+|status
+|String
+|処理状況（"直接実行", "申請提出", "申請承認待ち"）
+
+|isImmediate
+|Boolean
+|即座に実行されたかどうか
+
+|estimatedProcessingTime
+|String
+|処理予定時間（申請制の場合）
+
+|updatedRecord
+|Object
+|更新後の記録詳細（即座実行の場合のみ）
+
+|nextActions
+|List<String>
+|次に可能なアクション一覧
+
+|message
+|String
+|処理完了メッセージ
+|===
+
+==== RecordEditApprovalRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|requestId
+|Long
+|@NotNull
+|編集申請ID
+
+|action
+|ApprovalAction
+|@NotNull
+|承認アクション（APPROVE, REJECT）
+
+|comment
+|String
+|@Size(max=500)
+|承認・拒否コメント（任意）
+
+|notifyRequester
+|Boolean
+|
+|申請者通知フラグ（デフォルト：true）
+|===
+
+==== RecordEditApprovalResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|requestId
+|Long
+|処理した申請ID
+
+|action
+|ApprovalAction
+|実行したアクション
+
+|executedRecord
+|Object
+|実行された記録詳細（承認時のみ）
+
+|message
+|String
+|処理完了メッセージ
+|===
+
+=== Enum定義
+
+==== ApprovalAction
+
+|===
+|値 |説明
+
+|APPROVE
+|承認（編集・削除を実行）
+
+|REJECT
+|拒否（申請を却下）
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|recordTypeがnullの場合
+|記録種別は必須です。
+|MSG_REC_0030
+|400
+
+|2
+|recordIdがnullの場合
+|記録IDは必須です。
+|MSG_REC_0031
+|400
+
+|3
+|editTypeがnullの場合
+|編集種別は必須です。
+|MSG_REC_0032
+|400
+
+|4
+|reasonが空の場合
+|編集・削除理由は必須です。
+|MSG_REC_0017
+|400
+
+|5
+|reasonが500文字を超える場合
+|編集・削除理由は500文字以内で入力してください。
+|MSG_REC_0018
+|400
+
+|6
+|personalMatchDataとteamMatchDataが両方nullの場合（編集時）
+|編集内容は必須です。
+|MSG_REC_0033
+|400
+
+|7
+|指定された記録が見つからない場合
+|指定された記録が見つかりません。
+|MSG_REC_0013
+|404
+
+|8
+|記録の編集権限がない場合
+|この記録を編集する権限がありません。
+|MSG_REC_0014
+|403
+
+|9
+|記録の削除権限がない場合
+|この記録を削除する権限がありません。
+|MSG_REC_0015
+|403
+
+|10
+|既に編集申請中の場合
+|この記録は既に編集申請中です。
+|MSG_REC_0019
+|409
+
+|11
+|編集申請が見つからない場合
+|編集申請が見つかりません。
+|MSG_REC_0020
+|404
+
+|12
+|申請処理権限がない場合
+|この申請を処理する権限がありません。
+|MSG_REC_0021
+|403
+
+|13
+|申請が既に処理済みの場合
+|この申請は既に処理済みです。
+|MSG_REC_0022
+|409
+
+|14
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`RecordEditController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|recordEditService
+|RecordEditService
+|記録編集処理を行うサービス。`@RequiredArgsConstructor` によりインジェクション。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/records/edit"), @RequiredArgsConstructor
+
+|メソッド（記録編集申請）
+|@PutMapping("/request")
+
+|メソッド（記録削除申請）
+|@DeleteMapping("/request")
+
+|メソッド（申請承認・拒否）
+|@PostMapping("/approval")
+
+|メソッド（申請一覧取得）
+|@GetMapping("/requests")
+
+|引数
+|@RequestBody, @PathVariable, @Validated, @AuthenticationPrincipal, @RequestParam
+|===
+
+=== メソッド名
+
+* `requestEdit` - 記録編集申請
+* `requestDelete` - 記録削除申請
+* `processApproval` - 編集申請の承認・拒否
+* `getEditRequests` - 編集申請一覧取得
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|requestEdit
+|ResponseEntity<RecordEditResponseDto>
+|編集処理結果または申請情報を返却
+
+|requestDelete
+|ResponseEntity<RecordEditResponseDto>
+|削除処理結果または申請情報を返却
+
+|processApproval
+|ResponseEntity<RecordEditApprovalResponseDto>
+|承認処理結果を返却
+
+|getEditRequests
+|ResponseEntity<Page<RecordEditRequestDto>>
+|編集申請一覧をページネーションで返却
+|===
+
+=== 処理詳細
+
+==== requestEdit
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|記録編集内容を DTO として受け取る。
+
+|2
+|ユーザー・クラブ情報取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーIDと現在選択中のクラブIDを取得する。
+
+|3
+|サービス呼び出し
+|recordEditService.requestEdit(requestDto, userId, clubId) を呼び出す。
+
+|4
+|レスポンス生成
+|編集処理結果または申請情報を含む RecordEditResponseDto を返却する。
+
+|–
+|エラー処理
+|* バリデーションエラー時は適切なメッセージIDを返却  
+* 権限エラーや業務ルールエラーの場合は適切なメッセージIDを返却
+|===
+
+==== processApproval
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|承認・拒否内容を DTO として受け取る。
+
+|2
+|ユーザー情報取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーIDを取得する。
+
+|3
+|サービス呼び出し
+|recordEditService.processApproval(approvalDto, userId) を呼び出す。
+
+|4
+|レスポンス生成
+|承認処理結果を含む RecordEditApprovalResponseDto を返却する。
+|===
+
+== Service定義
+
+=== インターフェース
+
+`RecordEditService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|requestEdit
+|RecordEditRequestDto, Long userId, Long clubId
+|RecordEditResponseDto
+|記録編集を申請または直接実行する
+
+|requestDelete
+|RecordEditRequestDto, Long userId, Long clubId
+|RecordEditResponseDto
+|記録削除を申請または直接実行する
+
+|processApproval
+|RecordEditApprovalRequestDto, Long userId
+|RecordEditApprovalResponseDto
+|編集申請を承認または拒否する
+
+|getEditRequests
+|Long userId, Long clubId, Pageable pageable
+|Page<RecordEditRequestDto>
+|編集申請一覧を取得する
+
+|canEditDirectly
+|RecordType recordType, Long recordId, Long userId
+|Boolean
+|記録を直接編集可能かどうかを判定する
+|===
+
+=== 実装クラス
+
+`RecordEditServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|personalMatchRecordRepository
+|PersonalMatchRecordRepository
+|個人戦記録操作用リポジトリ
+
+|teamMatchRecordRepository
+|TeamMatchRecordRepository
+|団体戦記録操作用リポジトリ
+
+|recordEditRequestRepository
+|RecordEditRequestRepository
+|編集申請管理用リポジトリ
+
+|recordPermissionService
+|RecordPermissionService
+|権限チェック用サービス
+
+|recordNotificationService
+|RecordNotificationService
+|通知送信用サービス
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== 処理詳細
+
+==== requestEdit
+
+|===
+|順序 |概要 |詳細
+
+|1
+|記録存在確認・権限チェック
+|* 指定された記録の存在確認  
+* recordPermissionService.validateEditPermission(userId, recordId, recordType) で編集権限を確認  
+* 権限がない場合は `AccessDeniedException` をスロー → `MSG_REC_0014`
+
+|2
+|重複申請確認
+|* recordEditRequestRepository.findPendingByRecordId(recordId, recordType) で未処理申請をチェック  
+* 未処理申請がある場合は `PendingEditExistsException` をスロー → `MSG_REC_0019`
+
+|3
+|編集方式判定
+|* canEditDirectly(recordType, recordId, userId) で直接編集可能かどうか判定  
+* プライベート記録：直接編集  
+* クラブ公開記録：申請制
+
+|4-A
+|直接編集実行（プライベート記録）
+|* 記録データの妥当性チェック  
+* 適切なリポジトリを使用して記録を更新：  
+** PERSONAL: personalMatchRecordRepository.updateRecord()  
+** TEAM: teamMatchRecordRepository.updateRecord()  
+* 更新後の記録詳細を取得
+
+|4-B
+|編集申請作成（クラブ公開記録）
+|* RecordEditRequestEntity を生成：  
+** recordType, recordId: 対象記録情報  
+** requestType: EditRequestType.EDIT  
+** requestData: 新しい記録内容をJSON形式で格納  
+** reason: 編集理由  
+** status: EditRequestStatus.PENDING  
+** requestedBy: ユーザーID  
+** requestedAt: 現在日時  
+* recordEditRequestRepository.insertRequest() で申請を登録
+
+|5
+|通知送信
+|* 直接編集の場合：クラブメンバーに記録更新通知（クラブ公開の場合のみ）  
+* 申請制の場合：クラブ管理者に編集申請通知
+
+|6
+|レスポンス生成
+|RecordEditResponseDto に以下の情報を設定して返却：  
+* requestId: 編集申請ID（申請制の場合のみ）  
+* recordId: 対象記録ID  
+* editType: EditRequestType.EDIT  
+* status: "直接実行" または "申請提出"  
+* isImmediate: 直接編集されたかどうか  
+* estimatedProcessingTime: 処理予定時間（申請制の場合）  
+* updatedRecord: 更新後の記録詳細（直接編集の場合のみ）  
+* nextActions: 次に可能なアクション一覧  
+* message: 適切な完了メッセージ
+
+|–
+|エラー処理
+|* トランザクション内でエラーが発生した場合はロールバック  
+* 各種例外をスローし、エラーメッセージを返す
+|===
+
+==== processApproval
+
+|===
+|順序 |概要 |詳細
+
+|1
+|申請情報取得・権限確認
+|* recordEditRequestRepository.findById(requestId) で申請詳細を取得  
+* 申請が見つからない場合は `EditRequestNotFoundException` をスロー → `MSG_REC_0020`  
+* 申請状態が PENDING 以外の場合は `RequestAlreadyProcessedException` をスロー → `MSG_REC_0022`
+
+|2
+|承認権限確認
+|* recordPermissionService.validateApprovalPermission(userId, requestEntity) で承認権限を確認  
+* 権限がない場合は `AccessDeniedException` をスロー → `MSG_REC_0021`
+
+|3-A
+|承認処理（APPROVE）
+|* 申請内容の妥当性を再チェック  
+* 編集の場合：  
+** requestData から新しい記録内容を復元  
+** 適切なリポジトリで記録を更新  
+* 削除の場合：  
+** 適切なリポジトリで記録を削除  
+* 申請ステータスを APPROVED に更新
+
+|3-B
+|拒否処理（REJECT）
+|* 申請ステータスを REJECTED に更新  
+* 拒否理由をコメントに記録
+
+|4
+|申請状態更新
+|* recordEditRequestRepository.updateStatus() で申請状態を更新  
+* processedBy: 処理者のユーザーID  
+* processedAt: 現在日時  
+* processComment: 承認・拒否コメント
+
+|5
+|通知送信
+|* recordNotificationService.notifyEditRequestProcessed() で申請者に処理結果を通知  
+* 承認の場合：クラブメンバーにも記録変更を通知
+
+|6
+|レスポンス生成
+|RecordEditApprovalResponseDto に以下の情報を設定して返却：  
+* requestId: 処理した申請ID  
+* action: 実行したアクション  
+* executedRecord: 実行された記録詳細（承認時のみ）  
+* message: 処理完了メッセージ
+|===
+
+==== canEditDirectly
+
+|===
+|順序 |概要 |詳細
+
+|1
+|記録情報取得
+|* 適切なリポジトリから記録の詳細情報を取得  
+* visibility（公開設定）を確認
+
+|2
+|編集方式判定
+|* visibility が PRIVATE の場合：true（直接編集可能）  
+* visibility が CLUB の場合：false（申請制）  
+* 記録の所有者でない場合：false（編集不可）
+
+|3
+|判定結果返却
+|Boolean値で編集可能性を返却
+|===
+
+== Repository定義
+
+=== 拡張メソッド
+
+既存のRepositoryに以下のメソッドを追加：
+
+==== RecordEditRequestRepository（追加）
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findPendingByRecordId
+|Long recordId, RecordType recordType
+|List<RecordEditRequestDto>
+|指定記録の未処理編集申請を取得
+
+|findByClubId
+|Long clubId, Pageable pageable
+|Page<RecordEditRequestDto>
+|クラブの編集申請一覧を取得
+
+|insertRequest
+|RecordEditRequestEntity
+|void
+|編集申請を登録
+
+|updateStatus
+|Long requestId, EditRequestStatus status, String comment, Long processedBy
+|void
+|申請状態を更新
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 編集申請登録
+
+[source,sql]
+----
+INSERT INTO record_edit_requests (
+    record_type, record_id, request_type, request_data, reason, status,
+    requested_by, requested_at, created_at, updated_at
+) VALUES (
+    #{recordType}, #{recordId}, #{requestType}, #{requestData}, #{reason}, #{status},
+    #{requestedBy}, #{requestedAt}, #{createdAt}, #{updatedAt}
+)
+----
+
+==== 未処理申請確認
+
+[source,sql]
+----
+SELECT COUNT(*) > 0
+FROM record_edit_requests
+WHERE record_id = #{recordId}
+  AND record_type = #{recordType}
+  AND status = 'PENDING'
+----
+
+==== 申請一覧取得
+
+[source,sql]
+----
+SELECT 
+    rer.id,
+    rer.record_type,
+    rer.record_id,
+    rer.request_type,
+    rer.reason,
+    rer.status,
+    rer.requested_by,
+    rer.requested_at,
+    rer.processed_by,
+    rer.processed_at,
+    rer.process_comment,
+    u.name as requested_by_name,
+    CASE rer.record_type
+        WHEN 'PERSONAL' THEN pm.tournament_name
+        WHEN 'TEAM' THEN tm.tournament_name
+    END as record_tournament_name
+FROM record_edit_requests rer
+JOIN users u ON rer.requested_by = u.id
+LEFT JOIN personal_matches pm ON rer.record_type = 'PERSONAL' AND rer.record_id = pm.id
+LEFT JOIN team_matches tm ON rer.record_type = 'TEAM' AND rer.record_id = tm.id
+WHERE (pm.club_id = #{clubId} OR tm.club_id = #{clubId})
+ORDER BY rer.requested_at DESC
+LIMIT #{limit} OFFSET #{offset}
+----
+
+== 業務ルール
+
+=== 編集権限ルール
+
+1. **記録所有者**: 自分が登録した記録のみ編集・削除可能
+2. **プライベート記録**: 即座に編集・削除実行
+3. **クラブ公開記録**: 申請制により管理者承認後に実行
+4. **承認権限**: クラブ管理者のみが編集申請を承認・拒否可能
+
+=== 編集申請ルール
+
+* **重複申請禁止**: 同じ記録に対して未処理の申請がある場合は新規申請不可
+* **申請期限**: 特別な期限制限なし（記録の性質上、過去の修正は妥当）
+* **申請内容**: 編集理由の記載必須
+* **承認制**: すべての変更はクラブ管理者の承認が必要
+
+=== 削除ルール
+
+* **論理削除**: 記録は物理削除せず、削除フラグで管理
+* **関連データ**: 削除時は関連する統計情報も更新
+* **復旧可能**: 管理者が削除記録を復旧可能（将来拡張）
+
+=== 通知ルール
+
+* **申請時**: クラブ管理者に編集申請通知
+* **承認時**: 申請者に承認通知、クラブメンバーに記録変更通知
+* **拒否時**: 申請者に拒否理由と共に通知
+* **緊急時**: 緊急フラグ付きの場合は迅速処理
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== 記録編集申請リクエスト
+
+```json
+PUT /api/records/edit/request
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "recordType": "PERSONAL",
+    "recordId": 123,
+    "editType": "EDIT",
+    "personalMatchData": {
+        "tournamentName": "第30回 全日本剣道選手権大会",
+        "matchDate": "2024-01-15",
+        "round": "準決勝",
+        "redPlayer": {
+            "playerName": "田中太郎",
+            "clubName": "東京剣道クラブ",
+            "scores": ["MEN", "KOTE"]
+        },
+        "whitePlayer": {
+            "playerName": "佐藤花子",
+            "clubName": "大阪剣道クラブ",
+            "scores": ["DOU", "TSUKI"]
+        },
+        "visibility": "CLUB"
+    },
+    "reason": "白選手のスコアに記録漏れがあったため修正します。",
+    "urgentFlag": false,
+    "notifyClub": true
+}
+```
+
+==== 記録編集申請レスポンス（申請制）
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "requestId": 456,
+    "recordId": 123,
+    "editType": "EDIT",
+    "status": "申請提出",
+    "isImmediate": false,
+    "estimatedProcessingTime": "通常1-2営業日以内",
+    "updatedRecord": null,
+    "nextActions": [
+        "申請状況を確認する",
+        "クラブ管理者に連絡する",
+        "申請をキャンセルする"
+    ],
+    "message": "編集申請を送信しました。クラブ管理者の承認をお待ちください。"
+}
+```
+
+==== 記録削除申請リクエスト
+
+```json
+DELETE /api/records/edit/request
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "recordType": "PERSONAL",
+    "recordId": 123,
+    "editType": "DELETE",
+    "reason": "誤って重複登録してしまったため削除します。",
+    "urgentFlag": false,
+    "notifyClub": true
+}
+```
+
+==== 申請承認リクエスト
+
+```json
+POST /api/records/edit/approval
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "requestId": 456,
+    "action": "APPROVE",
+    "comment": "記録漏れの修正として適切です。承認いたします。",
+    "notifyRequester": true
+}
+```
+
+==== 申請承認レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "requestId": 456,
+    "action": "APPROVE",
+    "executedRecord": {
+        "id": 123,
+        "tournamentName": "第30回 全日本剣道選手権大会",
+        "matchDate": "2024-01-15",
+        "round": "準決勝",
+        "redPlayer": {
+            "name": "田中太郎",
+            "totalPoints": 2,
+            "isWinner": false
+        },
+        "whitePlayer": {
+            "name": "佐藤花子",
+            "totalPoints": 2,
+            "isWinner": false
+        },
+        "updatedAt": "2024-01-16T14:30:00"
+    },
+    "message": "編集申請を承認し、記録を更新しました。"
+}
+```
+
+==== 編集申請一覧取得リクエスト
+
+```
+GET /api/records/edit/requests?page=0&size=20&status=PENDING
+Authorization: Bearer {jwt-token}
+```
+
+==== 編集申請一覧レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "content": [
+        {
+            "id": 456,
+            "recordType": "PERSONAL",
+            "recordId": 123,
+            "requestType": "EDIT",
+            "requestTypeDisplay": "編集申請",
+            "reason": "白選手のスコアに記録漏れがあったため修正します。",
+            "status": "PENDING",
+            "requestedBy": 12,
+            "requestedAt": "2024-01-16T10:30:00",
+            "processedAt": null,
+            "processComment": null
+        }
+    ],
+    "totalElements": 1,
+    "number": 0,
+    "size": 20,
+    "totalPages": 1
+}
+```

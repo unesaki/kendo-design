@@ -1,0 +1,1277 @@
+= 試合結果入力・公開API 詳細設計書
+
+== 概要
+
+matchResultInputApi
+
+大会主催者・運営者が各試合の結果を入力し、公開状態を管理するAPI。
+個人戦・団体戦の詳細スコア、取得本数、反則情報等を記録し、段階的な公開制御を行う。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[大会主催管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== MatchResultInputRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|matchId
+|Long
+|@NotNull
+|試合ID
+
+|resultType
+|ResultType
+|@NotNull
+|結果種別（PERSONAL/TEAM）
+
+|winner
+|String
+|@NotBlank, @Pattern(regexp="^(red|white|draw)$")
+|勝者
+
+|duration
+|String
+|@Pattern(regexp="^[0-9]+分[0-9]+秒$")
+|試合時間
+
+|personalResults
+|List<PersonalResultInputDto>
+|@Valid, @Size(min=1, max=5)
+|個人戦結果一覧
+
+|teamResult
+|TeamResultInputDto
+|@Valid
+|団体戦結果
+
+|officialNotes
+|String
+|@Size(max=1000)
+|審判コメント
+
+|environment
+|MatchEnvironmentDto
+|@Valid
+|試合環境情報
+
+|publishSettings
+|ResultPublishSettingsDto
+|@Valid
+|公開設定
+
+|verification
+|ResultVerificationDto
+|@Valid
+|検証情報
+|===
+
+==== PersonalResultInputDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|position
+|PositionType
+|@NotNull
+|ポジション（先鋒、次鋒等）
+
+|redPlayerId
+|Long
+|@NotNull
+|赤側選手ID
+
+|whitePlayerId
+|Long
+|@NotNull
+|白側選手ID
+
+|winner
+|String
+|@NotBlank, @Pattern(regexp="^(red|white|draw)$")
+|勝者
+
+|endCondition
+|EndCondition
+|@NotNull
+|終了条件
+
+|duration
+|String
+|@Pattern(regexp="^[0-9]+分[0-9]+秒$")
+|試合時間
+
+|redScores
+|List<ScoringInputDto>
+|@Valid
+|赤側取得本数
+
+|whiteScores
+|List<ScoringInputDto>
+|@Valid
+|白側取得本数
+
+|redPenalties
+|List<PenaltyInputDto>
+|@Valid
+|赤側反則
+
+|whitePenalties
+|List<PenaltyInputDto>
+|@Valid
+|白側反則
+
+|specialEvents
+|List<SpecialEventInputDto>
+|@Valid
+|特別事象
+
+|judgeNotes
+|String
+|@Size(max=500)
+|審判メモ
+|===
+
+==== ScoringInputDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|scoreType
+|ScoreType
+|@NotNull
+|得点種別（MEN, KOTE, DOU, TSUKI）
+
+|timestamp
+|LocalTime
+|@NotNull
+|取得時刻
+
+|technique
+|String
+|@Size(max=100)
+|技の詳細
+
+|isValid
+|Boolean
+|
+|有効フラグ
+
+|judgeDecision
+|JudgeDecisionDto
+|@Valid
+|審判判定
+
+|videoTimestamp
+|String
+|@Pattern(regexp="^[0-9]+:[0-9]+$")
+|映像タイムスタンプ
+|===
+
+==== PenaltyInputDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|penaltyType
+|PenaltyType
+|@NotNull
+|反則種別
+
+|timestamp
+|LocalTime
+|@NotNull
+|発生時刻
+
+|reason
+|String
+|@NotBlank, @Size(max=200)
+|反則理由
+
+|severity
+|PenaltySeverity
+|@NotNull
+|重要度
+
+|isWarning
+|Boolean
+|
+|警告フラグ
+
+|affectsScore
+|Boolean
+|
+|スコアへの影響
+
+|refereeNotes
+|String
+|@Size(max=300)
+|審判コメント
+|===
+
+==== TeamResultInputDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|redTeamScore
+|Integer
+|@Min(0), @Max(5)
+|赤チーム得点
+
+|whiteTeamScore
+|Integer
+|@Min(0), @Max(5)
+|白チーム得点
+
+|finalResult
+|String
+|@NotBlank, @Pattern(regexp="^(red|white|draw)$")
+|最終結果
+
+|keyMatchPosition
+|PositionType
+|
+|勝敗を決した試合ポジション
+
+|teamStrategy
+|TeamStrategyDto
+|@Valid
+|チーム戦術情報
+
+|substitutions
+|List<SubstitutionDto>
+|@Valid
+|選手交代情報
+
+|teamPenalties
+|List<TeamPenaltyDto>
+|@Valid
+|チーム反則
+
+|coachingInfo
+|CoachingInfoDto
+|@Valid
+|指導情報
+|===
+
+==== ResultPublishSettingsDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|publishImmediately
+|Boolean
+|
+|即座に公開
+
+|publishAt
+|LocalDateTime
+|
+|公開予定時刻
+
+|publicLevel
+|PublicLevel
+|@NotNull
+|公開レベル
+
+|visibleToParticipants
+|Boolean
+|
+|参加者のみ閲覧可能
+
+|includeDetailedScore
+|Boolean
+|
+|詳細スコア公開
+
+|includePlayerInfo
+|Boolean
+|
+|選手情報公開
+
+|includeStatistics
+|Boolean
+|
+|統計情報公開
+
+|customMessage
+|String
+|@Size(max=500)
+|カスタムメッセージ
+|===
+
+==== MatchResultInputResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|matchId
+|Long
+|試合ID
+
+|resultId
+|Long
+|作成された結果ID
+
+|validationResults
+|ResultValidationDto
+|検証結果
+
+|publishStatus
+|PublishStatusDto
+|公開状況
+
+|nextMatchUpdates
+|List<NextMatchUpdateDto>
+|次試合への影響
+
+|tournamentProgress
+|TournamentProgressDto
+|大会進行状況
+
+|notifications
+|List<NotificationDto>
+|送信予定通知
+
+|warnings
+|List<String>
+|警告メッセージ
+
+|suggestions
+|List<String>
+|改善提案
+
+|canEdit
+|Boolean
+|編集可能フラグ
+
+|canPublish
+|Boolean
+|公開可能フラグ
+|===
+
+==== ResultValidationDto
+
+|===
+|フィールド名 |型 |説明
+
+|isValid
+|Boolean
+|検証結果
+
+|errors
+|List<ValidationErrorDto>
+|エラー一覧
+
+|warnings
+|List<ValidationWarningDto>
+|警告一覧
+
+|scoreConsistency
+|ScoreConsistencyDto
+|スコア整合性
+
+|timeConsistency
+|TimeConsistencyDto
+|時間整合性
+
+|ruleCompliance
+|RuleComplianceDto
+|ルール準拠性
+
+|dataCompleteness
+|DataCompletenessDto
+|データ完全性
+|===
+
+=== Enum定義
+
+==== EndCondition
+
+|===
+|値 |説明
+
+|TIME_UP
+|時間切れ
+
+|IPPON
+|一本
+
+|WAZA_ARI_AWASETE_IPPON
+|技あり合わせて一本
+
+|HANSOKU
+|反則
+
+|FUSENGACHI
+|不戦勝
+
+|WITHDRAWAL
+|棄権
+
+|INJURY
+|怪我による終了
+
+|DOUBLE_HANSOKU
+|両者反則負け
+|===
+
+==== PublicLevel
+
+|===
+|値 |説明
+
+|PRIVATE
+|非公開
+
+|PARTICIPANTS_ONLY
+|参加者のみ
+
+|CLUB_MEMBERS
+|クラブメンバーのみ
+
+|PUBLIC_BASIC
+|基本情報のみ公開
+
+|PUBLIC_DETAILED
+|詳細情報公開
+
+|FULL_PUBLIC
+|全情報公開
+|===
+
+==== ScoreType
+
+|===
+|値 |説明
+
+|MEN
+|面
+
+|KOTE
+|小手
+
+|DOU
+|胴
+
+|TSUKI
+|突き
+|===
+
+==== PenaltyType
+
+|===
+|値 |説明
+
+|MUBOBI
+|無防備
+
+|JOGAI
+|場外
+
+|PASSIVITY
+|消極的試合態度
+
+|CONTACT
+|接触
+
+|UNSPORTSMANLIKE
+|非スポーツマンライク行為
+
+|EQUIPMENT
+|用具違反
+
+|OTHER
+|その他
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|matchIdがnullの場合
+|試合IDは必須です。
+|MSG_RESULT_0001
+|400
+
+|2
+|指定された試合が見つからない場合
+|指定された試合が見つかりません。
+|MSG_RESULT_0002
+|404
+
+|3
+|試合結果の入力権限がない場合
+|この試合結果を入力する権限がありません。
+|MSG_RESULT_0003
+|403
+
+|4
+|試合がまだ開始されていない場合
+|試合開始前は結果を入力できません。
+|MSG_RESULT_0004
+|400
+
+|5
+|既に結果が入力済みの場合
+|既に結果が入力されています。
+|MSG_RESULT_0005
+|409
+
+|6
+|スコアの整合性に問題がある場合
+|スコアに整合性の問題があります。
+|MSG_RESULT_0006
+|400
+
+|7
+|必須情報が不足している場合
+|必須情報が不足しています。
+|MSG_RESULT_0007
+|400
+
+|8
+|剣道ルールに違反している場合
+|剣道ルールに違反しています。
+|MSG_RESULT_0008
+|400
+
+|9
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`MatchResultInputController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|matchResultInputService
+|MatchResultInputService
+|試合結果入力処理を行うサービス。`@RequiredArgsConstructor` によりインジェクション。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/matches/{matchId}/result"), @RequiredArgsConstructor
+
+|メソッド（結果入力）
+|@PostMapping
+
+|メソッド（結果更新）
+|@PutMapping("/{resultId}")
+
+|メソッド（公開設定変更）
+|@PutMapping("/{resultId}/publish")
+
+|メソッド（結果削除）
+|@DeleteMapping("/{resultId}")
+
+|引数
+|@PathVariable, @RequestBody, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+* `inputMatchResult` - 試合結果入力
+* `updateMatchResult` - 試合結果更新
+* `publishResult` - 結果公開・公開設定変更
+* `deleteResult` - 結果削除
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|inputMatchResult
+|ResponseEntity<MatchResultInputResponseDto>
+|入力結果と検証情報を返却
+
+|updateMatchResult
+|ResponseEntity<MatchResultUpdateResponseDto>
+|更新結果を返却
+
+|publishResult
+|ResponseEntity<ResultPublishResponseDto>
+|公開結果を返却
+
+|deleteResult
+|ResponseEntity<Void>
+|削除完了を返却
+|===
+
+=== 処理詳細
+
+==== inputMatchResult
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領・認証
+|パスパラメータから試合ID、リクエストボディから結果データを取得。
+ユーザー認証情報を取得。
+
+|2
+|権限確認
+|matchResultPermissionService.validateInputPermission(matchId, userId) で入力権限を確認。
+
+|3
+|試合状態確認
+|matchStatusService.canInputResult(matchId) で結果入力可能状態かチェック。
+
+|4
+|サービス呼び出し
+|matchResultInputService.inputResult(requestDto, userId) を呼び出す。
+
+|5
+|レスポンス生成
+|入力結果と検証情報を含む MatchResultInputResponseDto を返却する。
+
+|–
+|エラー処理
+|* 試合が見つからない場合は MSG_RESULT_0002 を返却  
+* 入力権限がない場合は MSG_RESULT_0003 を返却  
+* 試合開始前の場合は MSG_RESULT_0004 を返却  
+* 既に結果が存在する場合は MSG_RESULT_0005 を返却
+|===
+
+== Service定義
+
+=== インターフェース
+
+`MatchResultInputService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|inputResult
+|MatchResultInputRequestDto, Long userId
+|MatchResultInputResponseDto
+|試合結果を入力し、検証・公開制御を行う
+
+|updateResult
+|Long resultId, MatchResultInputRequestDto, Long userId
+|MatchResultUpdateResponseDto
+|既存の結果を更新する
+
+|publishResult
+|Long resultId, ResultPublishSettingsDto, Long userId
+|ResultPublishResponseDto
+|結果の公開設定を変更する
+
+|deleteResult
+|Long resultId, Long userId
+|void
+|結果を削除する
+
+|validateResultData
+|MatchResultInputRequestDto, Long matchId
+|ResultValidationDto
+|結果データを検証する
+
+|calculateNextMatches
+|Long matchId, String winner
+|List<NextMatchUpdateDto>
+|次試合への影響を計算する
+|===
+
+=== 実装クラス
+
+`MatchResultInputServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|matchResultRepository
+|MatchResultRepository
+|試合結果データ管理用リポジトリ
+
+|tournamentBracketRepository
+|TournamentBracketRepository
+|トーナメント表更新用リポジトリ
+
+|resultValidationService
+|ResultValidationService
+|結果検証専用サービス
+
+|scoreCalculationService
+|ScoreCalculationService
+|スコア計算専用サービス
+
+|tournamentProgressService
+|TournamentProgressService
+|大会進行管理サービス
+
+|notificationService
+|NotificationService
+|通知送信サービス
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== 処理詳細
+
+==== inputResult
+
+|===
+|順序 |概要 |詳細
+
+|1
+|試合情報取得・状態確認
+|* matchRepository.findMatchWithDetails(matchId) で試合詳細を取得  
+* 試合が見つからない場合は `MatchNotFoundException` をスロー → `MSG_RESULT_0002`  
+* 既に結果が存在する場合は `ResultAlreadyExistsException` をスロー → `MSG_RESULT_0005`
+
+|2
+|データ検証
+|* validateResultData(requestDto, matchId) で結果データを検証：  
+** スコア整合性チェック  
+** 剣道ルール準拠性チェック  
+** 時間整合性チェック  
+** データ完全性チェック  
+* 重大なエラーがある場合は `ResultValidationException` をスロー
+
+|3
+|個人戦結果処理
+|* personalResults の各試合について：  
+** scoreCalculationService.calculatePersonalScore() でスコア計算  
+** 取得本数の検証（有効打突の確認）  
+** 反則による減点・失格処理  
+** 試合時間と終了条件の整合性確認
+
+|4
+|団体戦結果計算
+|* scoreCalculationService.calculateTeamScore() で団体戦スコア計算：  
+** 各ポジションの勝敗から団体戦勝敗を決定  
+** 引き分けの場合の処理（代表戦等）  
+** チーム反則の影響を考慮
+
+|5
+|結果データ保存
+|* matchResultRepository.saveResult() で試合結果を保存：  
+** 基本結果情報  
+** 個人戦詳細結果  
+** 取得本数・反則詳細  
+** 審判コメント等
+
+|6
+|トーナメント表更新
+|* 次試合への影響を計算・更新：  
+** calculateNextMatches(matchId, winner) で次試合を特定  
+** tournamentBracketRepository.updateNextMatches() で進出者を設定  
+** 大会全体の進行状況を更新
+
+|7
+|公開制御処理
+|* publishSettings に応じて公開制御：  
+** publishImmediately が true の場合は即座に公開  
+** publishAt が設定されている場合はスケジュール公開  
+** publicLevel に応じた情報フィルタリング
+
+|8
+|通知処理
+|* 関係者への通知を準備・送信：  
+** 参加チームへの結果通知  
+** 次試合参加者への準備通知  
+** 大会観戦者への更新通知
+
+|9
+|統計情報更新
+|* 大会統計、選手統計、クラブ統計を更新
+
+|10
+|レスポンス生成
+|MatchResultInputResponseDto に以下の情報を設定して返却：  
+* matchId, resultId: 基本情報  
+* validationResults: 検証結果  
+* publishStatus: 公開状況  
+* nextMatchUpdates: 次試合への影響  
+* tournamentProgress: 大会進行状況  
+* notifications: 送信予定通知  
+* warnings: 警告メッセージ  
+* suggestions: 改善提案
+
+|–
+|エラー処理
+|* 各種例外をスローし、適切なエラーメッセージを返す  
+* トランザクション失敗時はロールバック実行  
+* 部分的な処理失敗は警告として記録
+|===
+
+== ScoreCalculationService定義
+
+剣道のスコア計算を行う専用サービス
+
+=== メソッド定義
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|calculatePersonalScore
+|List<ScoringInputDto>, List<PenaltyInputDto>
+|PersonalScoreResultDto
+|個人戦のスコアを計算
+
+|calculateTeamScore
+|List<PersonalScoreResultDto>
+|TeamScoreResultDto
+|団体戦のスコアを計算
+
+|validateScoringPoint
+|ScoringInputDto, MatchRuleDto
+|ValidationResultDto
+|取得本数の有効性を検証
+
+|applyPenalty
+|PenaltyInputDto, PersonalScoreResultDto
+|PersonalScoreResultDto
+|反則を適用
+
+|determineWinner
+|PersonalScoreResultDto, MatchRuleDto
+|String
+|勝者を決定
+
+|calculateMatchTime
+|LocalTime startTime, LocalTime endTime
+|String
+|試合時間を計算
+|===
+
+=== 剣道スコア計算ロジック
+
+```java
+public PersonalScoreResultDto calculatePersonalScore(List<ScoringInputDto> scores, List<PenaltyInputDto> penalties) {
+    PersonalScoreResultDto result = new PersonalScoreResultDto();
+    
+    // 有効打突の計算
+    int validIppon = 0;
+    for (ScoringInputDto score : scores) {
+        if (score.getIsValid() && isValidTechnique(score)) {
+            validIppon++;
+            if (validIppon >= 2) {
+                result.setWinner(score.getPlayer());
+                result.setEndCondition(EndCondition.IPPON);
+                return result;
+            }
+        }
+    }
+    
+    // 反則の適用
+    for (PenaltyInputDto penalty : penalties) {
+        if (penalty.getAffectsScore()) {
+            if (penalty.getSeverity() == PenaltySeverity.HANSOKU) {
+                result.setWinner(getOpponent(penalty.getPlayer()));
+                result.setEndCondition(EndCondition.HANSOKU);
+                return result;
+            }
+        }
+    }
+    
+    // 時間切れの場合の判定
+    if (result.getEndCondition() == EndCondition.TIME_UP) {
+        result.setWinner(determineWinnerByJudgment(scores, penalties));
+    }
+    
+    return result;
+}
+
+private boolean isValidTechnique(ScoringInputDto score) {
+    // 剣道の有効打突条件をチェック
+    // 1. 正確な部位への打突
+    // 2. 正しい姿勢での打突
+    // 3. 適切な間合いからの打突
+    // 4. 残心の確認
+    return score.getScoreType() != null && 
+           score.getTechnique() != null && 
+           score.getJudgeDecision().isValid();
+}
+```
+
+== Repository定義
+
+=== 使用メソッド
+
+==== MatchResultRepository（拡張）
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|saveMatchResult
+|MatchResultEntity
+|MatchResultEntity
+|試合結果を保存
+
+|savePersonalResults
+|List<PersonalMatchResultEntity>
+|List<PersonalMatchResultEntity>
+|個人戦結果を一括保存
+
+|saveScoringPoints
+|List<ScoringPointEntity>
+|List<ScoringPointEntity>
+|取得本数を一括保存
+
+|savePenalties
+|List<PenaltyEntity>
+|List<PenaltyEntity>
+|反則を一括保存
+
+|updatePublishStatus
+|Long resultId, PublishStatusDto
+|void
+|公開状況を更新
+
+|findResultById
+|Long resultId
+|Optional<MatchResultEntity>
+|結果IDから結果を取得
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 試合結果保存
+
+[source,sql]
+----
+INSERT INTO match_results (
+    match_id,
+    tournament_id,
+    result_type,
+    winner,
+    duration,
+    official_notes,
+    is_public,
+    public_level,
+    recorded_by,
+    recorded_at,
+    published_at,
+    created_at
+) VALUES (
+    #{matchId},
+    #{tournamentId},
+    #{resultType},
+    #{winner},
+    #{duration},
+    #{officialNotes},
+    #{isPublic},
+    #{publicLevel},
+    #{recordedBy},
+    #{recordedAt},
+    #{publishedAt},
+    NOW()
+)
+----
+
+==== 個人戦結果保存
+
+[source,sql]
+----
+INSERT INTO personal_match_results (
+    match_result_id,
+    position,
+    red_player_id,
+    white_player_id,
+    winner,
+    end_condition,
+    duration,
+    judge_notes,
+    created_at
+) VALUES
+<foreach collection="personalResults" item="result" separator=",">
+(
+    #{matchResultId},
+    #{result.position},
+    #{result.redPlayerId},
+    #{result.whitePlayerId},
+    #{result.winner},
+    #{result.endCondition},
+    #{result.duration},
+    #{result.judgeNotes},
+    NOW()
+)
+</foreach>
+----
+
+==== 取得本数保存
+
+[source,sql]
+----
+INSERT INTO scoring_points (
+    personal_result_id,
+    player_id,
+    score_type,
+    timestamp,
+    technique,
+    is_valid,
+    judge_decision,
+    video_timestamp,
+    created_at
+) VALUES
+<foreach collection="scoringPoints" item="point" separator=",">
+(
+    #{personalResultId},
+    #{point.playerId},
+    #{point.scoreType},
+    #{point.timestamp},
+    #{point.technique},
+    #{point.isValid},
+    #{point.judgeDecision},
+    #{point.videoTimestamp},
+    NOW()
+)
+</foreach>
+----
+
+==== 次試合更新
+
+[source,sql]
+----
+UPDATE tournament_brackets
+SET 
+    red_entry_id = CASE 
+        WHEN position = 'red' THEN #{winnerEntryId}
+        ELSE red_entry_id
+    END,
+    white_entry_id = CASE 
+        WHEN position = 'white' THEN #{winnerEntryId}
+        ELSE white_entry_id
+    END,
+    updated_at = NOW()
+WHERE id IN (
+    SELECT next_match_id 
+    FROM tournament_brackets 
+    WHERE id = #{currentBracketId}
+)
+----
+
+== 業務ルール
+
+=== 結果入力ルール
+
+1. **入力権限**: 大会主催者・運営者のみ
+2. **入力タイミング**: 試合開始後のみ可能
+3. **一意性**: 1試合につき1つの結果のみ
+4. **完全性**: 必須項目の入力必須
+5. **整合性**: 剣道ルールに準拠した結果のみ
+
+=== スコア計算ルール
+
+* **個人戦**: 2本取得で勝利、反則負け、時間切れ判定
+* **団体戦**: 過半数勝利、同数の場合は代表戦
+* **有効打突**: 正確な部位、正しい姿勢、適切な間合い、残心
+* **反則**: 種別に応じた減点・失格処理
+
+=== 公開制御ルール
+
+* **段階公開**: 基本情報→詳細スコア→全情報
+* **権限別表示**: 参加者・一般・運営者で表示レベル制御
+* **時間制御**: 指定時刻での自動公開
+* **承認制**: 運営者承認後の公開
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== 試合結果入力リクエスト
+
+```
+POST /api/matches/1001/result
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "matchId": 1001,
+    "resultType": "TEAM",
+    "winner": "red",
+    "duration": "45分30秒",
+    "personalResults": [
+        {
+            "position": "先鋒",
+            "redPlayerId": 2001,
+            "whitePlayerId": 3001,
+            "winner": "red",
+            "endCondition": "IPPON",
+            "duration": "3分45秒",
+            "redScores": [
+                {
+                    "scoreType": "MEN",
+                    "timestamp": "10:38:30",
+                    "technique": "正面打ち",
+                    "isValid": true,
+                    "judgeDecision": {
+                        "judge1": true,
+                        "judge2": true,
+                        "judge3": true
+                    }
+                },
+                {
+                    "scoreType": "KOTE",
+                    "timestamp": "10:41:15",
+                    "technique": "右小手",
+                    "isValid": true,
+                    "judgeDecision": {
+                        "judge1": true,
+                        "judge2": true,
+                        "judge3": false
+                    }
+                }
+            ],
+            "whiteScores": [],
+            "redPenalties": [],
+            "whitePenalties": [
+                {
+                    "penaltyType": "JOGAI",
+                    "timestamp": "10:40:00",
+                    "reason": "場外逃避",
+                    "severity": "WARNING",
+                    "isWarning": true,
+                    "affectsScore": false
+                }
+            ]
+        }
+    ],
+    "teamResult": {
+        "redTeamScore": 3,
+        "whiteTeamScore": 2,
+        "finalResult": "red",
+        "keyMatchPosition": "中堅"
+    },
+    "officialNotes": "熱戦でした",
+    "publishSettings": {
+        "publishImmediately": true,
+        "publicLevel": "PUBLIC_DETAILED",
+        "includeDetailedScore": true,
+        "includePlayerInfo": true,
+        "includeStatistics": false
+    }
+}
+```
+
+==== 試合結果入力レスポンス
+
+```json
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{
+    "matchId": 1001,
+    "resultId": 5001,
+    "validationResults": {
+        "isValid": true,
+        "errors": [],
+        "warnings": [
+            "白選手の反則が多く記録されています"
+        ],
+        "scoreConsistency": {
+            "isConsistent": true,
+            "individualScores": [2, 0],
+            "teamScore": [3, 2]
+        },
+        "timeConsistency": {
+            "isValid": true,
+            "totalDuration": "45分30秒",
+            "individualDurations": ["3分45秒", "4分12秒", "2分58秒", "3分22秒", "4分01秒"]
+        },
+        "ruleCompliance": {
+            "isCompliant": true,
+            "validTechniques": 6,
+            "invalidTechniques": 0,
+            "properPenalties": 3
+        }
+    },
+    "publishStatus": {
+        "isPublished": true,
+        "publishedAt": "2024-03-15T11:25:00",
+        "publicLevel": "PUBLIC_DETAILED",
+        "visibleToParticipants": true,
+        "viewCount": 0
+    },
+    "nextMatchUpdates": [
+        {
+            "nextMatchId": 1009,
+            "round": 2,
+            "roundName": "2回戦",
+            "advancingEntry": {
+                "entryId": 456,
+                "name": "東京剣道クラブA",
+                "position": "red"
+            },
+            "scheduledTime": "2024-03-15T14:00:00"
+        }
+    ],
+    "tournamentProgress": {
+        "completedMatches": 8,
+        "totalMatches": 15,
+        "currentRound": 1,
+        "progressPercentage": 53,
+        "estimatedTimeRemaining": "4時間30分"
+    },
+    "notifications": [
+        {
+            "type": "RESULT_PUBLISHED",
+            "recipients": ["participants", "observers"],
+            "message": "1回戦第1試合の結果が公開されました",
+            "scheduledAt": "2024-03-15T11:25:00"
+        },
+        {
+            "type": "NEXT_MATCH_NOTICE",
+            "recipients": ["东京剣道クラブA"],
+            "message": "2回戦への進出が決定しました。14:00から試合開始予定です。",
+            "scheduledAt": "2024-03-15T11:30:00"
+        }
+    ],
+    "warnings": [
+        "次試合まで2時間30分の間隔があります"
+    ],
+    "suggestions": [
+        "勝利チームに準備時間の確認を行うことをお勧めします"
+    ],
+    "canEdit": true,
+    "canPublish": true
+}
+```
+
+==== 結果更新リクエスト
+
+```
+PUT /api/matches/1001/result/5001
+Authorization: Bearer {jwt-token}
+```
+
+==== 公開設定変更リクエスト
+
+```
+PUT /api/matches/1001/result/5001/publish
+Authorization: Bearer {jwt-token}
+```

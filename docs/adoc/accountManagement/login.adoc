@@ -1,0 +1,439 @@
+= ログインAPI 詳細設計書
+
+== 概要
+
+loginApi
+
+ユーザーがメールアドレスとパスワードを使用してシステムにログインするAPI。
+認証に成功した場合、JWTトークンを発行してクライアントに返却する。
+
+== Bean定義
+
+=== Entity定義
+
+==== UserEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|ユーザーID（自動採番）
+
+|email
+|String
+|ログイン用メールアドレス
+
+|passwordHash
+|String
+|ハッシュ化済みパスワード
+
+|isEmailVerified
+|Boolean
+|メール認証済みフラグ
+
+|isEnabled
+|Boolean
+|アカウント有効状態フラグ
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+==== UserProfileEntity
+
+|===
+|フィールド名 |型 |説明
+
+|userId
+|Long
+|ユーザーID（UserEntity.id）
+
+|name
+|String
+|表示名
+
+|nickname
+|String
+|ニックネーム
+
+|profileImageUrl
+|String
+|プロフィール画像URL
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== Dto定義
+
+==== LoginRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|email
+|String
+|@NotBlank, @Email
+|ログイン用メールアドレス
+
+|password
+|String
+|@NotBlank
+|パスワード（平文）
+|===
+
+==== LoginResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|accessToken
+|String
+|JWTアクセストークン
+
+|tokenType
+|String
+|トークンタイプ（固定値："Bearer"）
+
+|expiresIn
+|Long
+|トークン有効期限（秒）
+
+|user
+|UserInfoDto
+|ログインユーザー情報
+|===
+
+==== UserInfoDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|ユーザーID
+
+|email
+|String
+|メールアドレス
+
+|name
+|String
+|表示名
+
+|nickname
+|String
+|ニックネーム
+
+|profileImageUrl
+|String
+|プロフィール画像URL
+
+|isEmailVerified
+|Boolean
+|メール認証済みフラグ
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|emailが空の場合
+|メールアドレスは必須です。
+|MSG_ACC_0001
+|400
+
+|2
+|emailの形式が不正な場合
+|メールアドレスの形式が正しくありません。
+|MSG_ACC_0002
+|400
+
+|3
+|passwordが空の場合
+|パスワードは必須です。
+|MSG_ACC_0003
+|400
+
+|4
+|ユーザーが存在しない場合
+|メールアドレスまたはパスワードが間違っています。
+|MSG_ACC_0004
+|401
+
+|5
+|パスワードが一致しない場合
+|メールアドレスまたはパスワードが間違っています。
+|MSG_ACC_0004
+|401
+
+|6
+|アカウントが無効な場合
+|アカウントが無効化されています。
+|MSG_ACC_0005
+|403
+
+|7
+|メール認証が未完了の場合
+|メール認証が完了していません。
+|MSG_ACC_0006
+|403
+|===
+
+== Controller定義
+
+=== クラス名
+
+`AuthController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|authService
+|AuthService
+|認証処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/auth"), @RequiredArgsConstructor
+
+|メソッド
+|@PostMapping("/login")
+
+|引数
+|@RequestBody, @Validated
+|===
+
+=== メソッド名
+
+`login`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<LoginResponseDto>
+|ログイン成功時にトークン情報を返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|クライアントから送信されたメールアドレス、パスワードを DTO（LoginRequestDto）として受け取る。
+
+|2
+|サービス呼び出し
+|`authService.login(requestDto)` を呼び出す。
+
+|3
+|レスポンス生成
+|戻り値の `LoginResponseDto` を `ResponseEntity.ok().body(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* バリデーションエラーが発生した場合は適切なメッセージIDを返す  
+* 認証失敗時は `MSG_ACC_0004` を返す  
+* アカウント無効化時は `MSG_ACC_0005` を返す  
+* メール未認証時は `MSG_ACC_0006` を返す
+|===
+
+== Service定義
+
+=== インターフェース
+
+`AuthService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|login
+|LoginRequestDto
+|LoginResponseDto
+|ユーザー認証を実行し、JWTトークンを発行する。
+|===
+
+=== 実装クラス
+
+`AuthServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|userRepository
+|UserRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+
+|passwordEncoder
+|PasswordEncoder
+|パスワードのハッシュ化・照合に使用
+
+|jwtTokenProvider
+|JwtTokenProvider
+|JWTトークンの生成・検証に使用
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor
+|===
+
+=== パラメータ
+
+|===
+|名称 |型 |説明
+
+|requestDto
+|LoginRequestDto
+|ログインリクエスト情報
+|===
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|LoginResponseDto
+|JWTトークンとユーザー情報を含むDTO
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|ユーザー情報の取得
+|* `userRepository.findByEmailWithProfile(email)` を呼び出し、ユーザー情報とプロフィール情報を取得  
+* ユーザーが存在しない場合は `AuthenticationException` をスロー → `MSG_ACC_0004`
+
+|2
+|アカウント状態の検証
+|* `user.isEnabled` が false の場合は `AccountDisabledException` をスロー → `MSG_ACC_0005`  
+* `user.isEmailVerified` が false の場合は `EmailNotVerifiedException` をスロー → `MSG_ACC_0006`
+
+|3
+|パスワードの照合
+|* `passwordEncoder.matches(password, user.passwordHash)` でパスワードを照合  
+* 一致しない場合は `AuthenticationException` をスロー → `MSG_ACC_0004`
+
+|4
+|JWTトークンの生成
+|* `jwtTokenProvider.generateToken(user.id, user.email)` でJWTトークンを生成  
+* 有効期限は24時間（86400秒）
+
+|5
+|レスポンス生成
+|LoginResponseDto に以下の情報を設定して返却：  
+* accessToken: 生成されたJWTトークン  
+* tokenType: "Bearer"  
+* expiresIn: 86400  
+* user: ユーザー情報とプロフィール情報
+
+|–
+|エラー処理
+|* `AuthenticationException` や `AccountDisabledException` をスローし、エラーメッセージを返す  
+* 詳細は「バリデーションエラー一覧」を参照する
+|===
+
+== Repository定義
+
+=== インターフェース名
+
+`UserRepository`
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== パラメータ・戻り値
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findByEmailWithProfile
+|String email
+|Optional<UserWithProfileDto>
+|メールアドレスでユーザーとプロフィール情報を取得
+|===
+
+=== 使用クエリ（MyBatis）
+
+[source,sql]
+----
+SELECT 
+    u.id,
+    u.email,
+    u.password_hash,
+    u.is_email_verified,
+    u.is_enabled,
+    u.created_at,
+    u.updated_at,
+    p.name,
+    p.nickname,
+    p.profile_image_url
+FROM users u
+LEFT JOIN user_profiles p ON u.id = p.user_id
+WHERE u.email = #{email}
+----
+
+== JWT設定
+
+=== トークン仕様
+
+|===
+|項目 |値 |説明
+
+|アルゴリズム
+|HS256
+|HMAC SHA-256を使用
+
+|有効期限
+|24時間
+|86400秒
+
+|ペイロード
+|userId, email, iat, exp
+|ユーザーID、メールアドレス、発行時刻、有効期限
+|===
+
+=== セキュリティ考慮事項
+
+* シークレットキーは環境変数から取得
+* トークンの検証は各APIリクエスト時に実行
+* トークン有効期限切れ時は401エラーを返却

@@ -1,0 +1,616 @@
+= エントリー内容編集API 詳細設計書
+
+== 概要
+
+editEntryContentApi
+
+チームエントリー申請後、承認前の段階でチーム名や選手構成等のエントリー内容を編集するAPI。
+変更内容は主催者の承認が必要で、承認されるまでは元の内容が有効とする。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[大会参加管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== EditEntryContentRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|entryId
+|Long
+|@NotNull
+|対象エントリーID
+
+|changeType
+|ChangeType
+|@NotNull
+|変更種別
+
+|newTeamName
+|String
+|@Size(max=50)
+|新しいチーム名（チーム名変更時）
+
+|newRoster
+|List<PlayerRegistrationDto>
+|@Valid, @Size(min=5, max=7)
+|新しい選手構成（選手変更時）
+
+|reason
+|String
+|@NotBlank, @Size(max=500)
+|変更理由
+
+|comment
+|String
+|@Size(max=500)
+|追加コメント（任意）
+|===
+
+==== EditEntryContentResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|changeRequestId
+|Long
+|作成された変更申請ID
+
+|entryId
+|Long
+|対象エントリーID
+
+|currentEntry
+|TournamentTeamEntryDto
+|現在有効なエントリー情報
+
+|pendingChanges
+|List<EntryChangeRequestDto>
+|未処理の変更申請一覧
+
+|estimatedProcessingTime
+|String
+|処理予定時間の目安
+
+|message
+|String
+|申請完了メッセージ
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|entryIdがnullの場合
+|エントリーIDは必須です。
+|MSG_SYS_0005
+|400
+
+|2
+|changeTypeがnullの場合
+|変更種別は必須です。
+|MSG_PTC_0023
+|400
+
+|3
+|reasonが空の場合
+|変更理由は必須です。
+|MSG_PTC_0024
+|400
+
+|4
+|reasonが500文字を超える場合
+|変更理由は500文字以内で入力してください。
+|MSG_PTC_0025
+|400
+
+|5
+|newTeamNameが50文字を超える場合
+|チーム名は50文字以内で入力してください。
+|MSG_PTC_0002
+|400
+
+|6
+|newRosterで選手が5名未満の場合
+|正選手5名の登録が必要です。
+|MSG_PTC_0012
+|400
+
+|7
+|newRosterで選手が7名を超える場合
+|登録できる選手は最大7名です。
+|MSG_PTC_0019
+|400
+
+|8
+|指定されたエントリーが存在しない場合
+|指定されたエントリーが見つかりません。
+|MSG_PTC_0009
+|404
+
+|9
+|編集権限がない場合
+|このエントリーを編集する権限がありません。
+|MSG_PTC_0020
+|403
+
+|10
+|エントリーが編集可能な状態でない場合
+|このエントリーは編集できません。
+|MSG_PTC_0026
+|409
+
+|11
+|未処理の変更申請が既に存在する場合
+|未処理の変更申請があるため、新しい申請はできません。
+|MSG_PTC_0027
+|409
+
+|12
+|大会開催後の変更申請の場合
+|大会開催後は変更できません。
+|MSG_PTC_0007
+|403
+
+|13
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TournamentParticipationController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|participationService
+|TournamentParticipationService
+|大会参加処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/participation"), @RequiredArgsConstructor
+
+|メソッド（内容編集申請）
+|@PutMapping("/entries/{entryId}/edit")
+
+|メソッド（変更申請一覧取得）
+|@GetMapping("/entries/{entryId}/change-requests")
+
+|引数
+|@PathVariable, @RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+* `requestEntryEdit` - エントリー内容編集申請
+* `getChangeRequests` - 変更申請一覧取得
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|requestEntryEdit
+|ResponseEntity<EditEntryContentResponseDto>
+|申請成功時に変更申請情報と現在状況を返却
+
+|getChangeRequests
+|ResponseEntity<List<EntryChangeRequestDto>>
+|エントリーに関する変更申請一覧を返却
+|===
+
+=== 処理詳細
+
+==== requestEntryEdit
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|パスパラメータからエントリーID、リクエストボディから変更内容を DTO（EditEntryContentRequestDto）として受け取る。
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーの ID（userId）を取得する。
+
+|3
+|サービス呼び出し
+|`participationService.requestEntryEdit(entryId, requestDto, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `EditEntryContentResponseDto` を `ResponseEntity.ok().body(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* バリデーションエラーが発生した場合は適切なメッセージIDを返す  
+* 権限エラーや業務ルールエラーの場合は適切なメッセージIDを返す
+|===
+
+==== getChangeRequests
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|パスパラメータからエントリーIDを取得。
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーの ID（userId）を取得する。
+
+|3
+|サービス呼び出し
+|`participationService.getChangeRequests(entryId, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `List<EntryChangeRequestDto>` を `ResponseEntity.ok().body(...)` にラップして返却する。
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TournamentParticipationService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|requestEntryEdit
+|Long entryId, EditEntryContentRequestDto, Long userId
+|EditEntryContentResponseDto
+|エントリー内容の変更を申請する。
+
+|getChangeRequests
+|Long entryId, Long userId
+|List<EntryChangeRequestDto>
+|指定エントリーの変更申請一覧を取得する。
+|===
+
+=== 実装クラス
+
+`TournamentParticipationServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentTeamEntryRepository
+|TournamentTeamEntryRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+
+|entryChangeRequestRepository
+|EntryChangeRequestRepository
+|変更申請管理に使用
+
+|participationPermissionService
+|ParticipationPermissionService
+|権限チェックに使用
+
+|participationNotificationService
+|ParticipationNotificationService
+|通知送信に使用
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== 処理詳細
+
+==== requestEntryEdit
+
+|===
+|順序 |概要 |詳細
+
+|1
+|エントリー情報取得・権限確認
+|* `tournamentTeamEntryRepository.findByIdWithDetails(entryId)` でエントリー詳細を取得  
+* 存在しない場合は `EntryNotFoundException` をスロー → `MSG_PTC_0009`  
+* `participationPermissionService.validateEditPermission(userId, entryId)` で編集権限を確認
+
+|2
+|エントリー状態確認
+|* エントリー状態が PENDING でない場合（APPROVED等）は `EntryNotEditableException` をスロー → `MSG_PTC_0026`  
+* 大会開催日が過ぎている場合は `EventDatePassedException` をスロー → `MSG_PTC_0007`
+
+|3
+|未処理変更申請確認
+|* `entryChangeRequestRepository.findPendingByTeamEntryId(entryId)` で未処理の変更申請をチェック  
+* 未処理の申請が存在する場合は `PendingChangeExistsException` をスロー → `MSG_PTC_0027`
+
+|4
+|変更内容の検証
+|==== 4-1. 変更種別別検証 ====  
+* TEAM_NAME: newTeamName の有効性確認  
+* ROSTER_CHANGE: newRoster の選手構成検証（重複、必須ポジション等）  
+* SUBSTITUTE_CHANGE: 補欠選手のみの変更内容確認  
+
+==== 4-2. 変更の必要性確認 ====  
+* 現在の内容と新しい内容を比較  
+* 変更がない場合は `NoChangeRequiredException` をスロー
+
+|5
+|変更申請エンティティ作成
+|* EntryChangeRequestEntity を生成し、以下の値をセット：  
+** teamEntryId: 対象エントリーID  
+** changeType: 変更種別  
+** requestData: 変更内容をJSON形式で格納  
+** status: ChangeRequestStatus.PENDING  
+** reason: 変更理由  
+** requestedBy: 申請ユーザーID  
+** requestedAt: 現在日時  
+** createdAt, updatedAt: 現在日時
+
+|6
+|変更申請の登録
+|* `entryChangeRequestRepository.insertChangeRequest(changeRequestEntity)` で変更申請をDBに登録
+
+|7
+|通知送信
+|* `participationNotificationService.notifyChangeRequested(changeRequestEntity.id)` で主催者に変更申請通知を送信
+
+|8
+|レスポンス生成
+|EditEntryContentResponseDto に以下の情報を設定して返却：  
+* changeRequestId: 作成された変更申請ID  
+* entryId: 対象エントリーID  
+* currentEntry: 現在有効なエントリー情報  
+* pendingChanges: 未処理の変更申請一覧  
+* estimatedProcessingTime: "通常1-2営業日以内"  
+* message: "変更申請を送信しました。主催者の承認をお待ちください。"
+
+|–
+|エラー処理
+|* トランザクション内でエラーが発生した場合はロールバック  
+* 各種例外をスローし、エラーメッセージを返す
+|===
+
+==== getChangeRequests
+
+|===
+|順序 |概要 |詳細
+
+|1
+|エントリー情報取得・権限確認
+|* `tournamentTeamEntryRepository.findByIdWithDetails(entryId)` でエントリー詳細を取得  
+* `participationPermissionService.validateEditPermission(userId, entryId)` で閲覧権限を確認
+
+|2
+|変更申請一覧取得
+|* `entryChangeRequestRepository.findByTeamEntryId(entryId)` で変更申請一覧を取得  
+* 申請日時の降順でソート
+
+|3
+|レスポンス生成
+|変更申請一覧を EntryChangeRequestDto のリストとして返却
+|===
+
+== Repository定義
+
+=== EntryChangeRequestRepository（拡張メソッド）
+
+共通定義に加えて、以下のメソッドを使用：
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|insertChangeRequest
+|EntryChangeRequestEntity
+|void
+|変更申請を登録
+
+|findByTeamEntryIdOrderByRequestedAtDesc
+|Long teamEntryId
+|List<EntryChangeRequestDto>
+|エントリーの変更申請一覧を時系列順で取得
+
+|findPendingByTeamEntryId
+|Long teamEntryId
+|List<EntryChangeRequestDto>
+|未処理の変更申請のみを取得
+
+|validateNoConflictingChanges
+|Long teamEntryId, ChangeType changeType
+|Boolean
+|同種の変更申請が重複していないかチェック
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 変更申請登録
+
+[source,sql]
+----
+INSERT INTO entry_change_requests (
+    team_entry_id, change_type, request_data, status, reason, 
+    requested_by, requested_at, created_at, updated_at
+) VALUES (
+    #{teamEntryId}, #{changeType}, #{requestData}, #{status}, #{reason},
+    #{requestedBy}, #{requestedAt}, #{createdAt}, #{updatedAt}
+)
+----
+
+==== 変更申請一覧取得
+
+[source,sql]
+----
+SELECT 
+    ecr.id,
+    ecr.team_entry_id,
+    ecr.change_type,
+    ecr.request_data,
+    ecr.status,
+    ecr.reason,
+    ecr.requested_by,
+    ecr.requested_at,
+    ecr.processed_by,
+    ecr.processed_at,
+    ecr.process_comment,
+    u.name as requested_by_name
+FROM entry_change_requests ecr
+JOIN users u ON ecr.requested_by = u.id
+WHERE ecr.team_entry_id = #{teamEntryId}
+ORDER BY ecr.requested_at DESC
+----
+
+==== 未処理変更申請確認
+
+[source,sql]
+----
+SELECT COUNT(*) > 0
+FROM entry_change_requests
+WHERE team_entry_id = #{teamEntryId}
+  AND status = 'PENDING'
+  AND change_type = #{changeType}
+----
+
+== 業務ルール
+
+=== 変更申請ルール
+
+1. **申請可能状態**: エントリーがPENDING状態のもののみ変更可能
+2. **重複申請禁止**: 同じエントリーに対して未処理の変更申請がある場合は新規申請不可
+3. **期限制限**: 大会開催日を過ぎた場合は変更申請不可
+4. **承認制**: すべての変更は主催者の承認が必要
+
+=== 変更種別ルール
+
+* **TEAM_NAME**: チーム名のみの変更
+* **ROSTER_CHANGE**: 選手構成全体の変更（正選手・補欠選手両方）
+* **SUBSTITUTE_CHANGE**: 補欠選手のみの変更
+
+=== 承認ルール
+
+* **主催者承認**: 主催者のみが変更申請を承認・拒否可能
+* **申請者通知**: 承認・拒否時に申請者に通知送信
+* **履歴保持**: 変更申請の履歴を全て記録・保持
+
+== 通知機能
+
+=== 変更申請通知（主催者向け）
+
+変更申請が提出された場合、以下の通知を主催者に送信：
+
+* **件名**: 「【剣道大会管理システム】エントリー変更申請があります」
+* **内容**: 大会名、申請クラブ名、変更種別、変更理由、承認用リンク
+* **送信方法**: アプリ内通知 + メール通知
+
+=== 処理完了通知（申請者向け）
+
+変更申請が処理された場合、以下の通知を申請者に送信：
+
+* **承認時**: 「エントリー変更が承認されました」
+* **拒否時**: 「エントリー変更が拒否されました」+ 拒否理由
+* **送信方法**: アプリ内通知 + メール通知
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== 変更申請リクエスト
+
+```json
+PUT /api/participation/entries/456/edit
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "entryId": 456,
+    "changeType": "TEAM_NAME",
+    "newTeamName": "大阪剣道クラブBチーム",
+    "reason": "メンバー構成の変更により、チーム名を変更したいため",
+    "comment": "よろしくお願いいたします。"
+}
+```
+
+==== 変更申請レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "changeRequestId": 789,
+    "entryId": 456,
+    "currentEntry": {
+        "id": 456,
+        "teamName": "大阪剣道クラブA",
+        "status": "PENDING",
+        "canEdit": false,
+        "canWithdraw": true
+    },
+    "pendingChanges": [
+        {
+            "id": 789,
+            "changeType": "TEAM_NAME",
+            "changeTypeDisplay": "チーム名変更",
+            "status": "PENDING",
+            "reason": "メンバー構成の変更により、チーム名を変更したいため",
+            "requestedAt": "2024-01-15T14:30:00"
+        }
+    ],
+    "estimatedProcessingTime": "通常1-2営業日以内",
+    "message": "変更申請を送信しました。主催者の承認をお待ちください。"
+}
+```
+
+==== 変更申請一覧取得リクエスト
+
+```
+GET /api/participation/entries/456/change-requests
+Authorization: Bearer {jwt-token}
+```
+
+==== 変更申請一覧レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+[
+    {
+        "id": 789,
+        "teamEntryId": 456,
+        "changeType": "TEAM_NAME",
+        "changeTypeDisplay": "チーム名変更",
+        "requestData": {
+            "newTeamName": "大阪剣道クラブBチーム"
+        },
+        "status": "PENDING",
+        "reason": "メンバー構成の変更により、チーム名を変更したいため",
+        "requestedBy": 12,
+        "requestedAt": "2024-01-15T14:30:00",
+        "processedAt": null,
+        "processComment": null
+    }
+]
+```

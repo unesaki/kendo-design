@@ -1,0 +1,516 @@
+= クラブ参加承認・拒否API 詳細設計書
+
+== 概要
+
+processJoinRequestApi
+
+クラブ管理者が参加申請に対して承認または拒否の対応を行うAPI。
+承認時はメンバーとして登録し、拒否時はステータスを更新する。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[クラブ管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== ProcessJoinRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|requestId
+|Long
+|@NotNull
+|処理対象の申請ID
+
+|action
+|RequestAction
+|@NotNull
+|実行アクション（APPROVE/REJECT）
+
+|comment
+|String
+|@Size(max=500)
+|処理理由（任意）
+|===
+
+==== ProcessJoinRequestResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|requestId
+|Long
+|処理された申請ID
+
+|action
+|RequestAction
+|実行されたアクション
+
+|applicant
+|UserInfoDto
+|申請者情報
+
+|club
+|ClubDto
+|対象クラブ情報
+
+|processedAt
+|LocalDateTime
+|処理日時
+
+|message
+|String
+|処理完了メッセージ
+|===
+
+=== Enum定義
+
+==== RequestAction
+
+|===
+|値 |説明
+
+|APPROVE
+|承認（メンバーとして登録）
+
+|REJECT
+|拒否（申請を却下）
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|requestIdがnullの場合
+|申請IDは必須です。
+|MSG_SYS_0005
+|400
+
+|2
+|actionがnullの場合
+|アクションは必須です。
+|MSG_SYS_0005
+|400
+
+|3
+|commentが500文字を超える場合
+|コメントは500文字以内で入力してください。
+|MSG_CLB_0015
+|400
+
+|4
+|指定された申請が存在しない場合
+|参加申請が見つかりません。
+|MSG_CLB_0012
+|404
+
+|5
+|申請が既に処理済みの場合
+|この申請は既に処理済みです。
+|MSG_CLB_0016
+|409
+
+|6
+|クラブ管理者権限がない場合
+|この操作にはクラブ管理者権限が必要です。
+|MSG_CLB_0003
+|403
+
+|7
+|申請者が既にメンバーの場合（承認時）
+|申請者は既にクラブメンバーです。
+|MSG_CLB_0008
+|409
+
+|8
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`ClubController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|clubService
+|ClubService
+|クラブ管理処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/clubs"), @RequiredArgsConstructor
+
+|メソッド
+|@PutMapping("/join-requests/{requestId}")
+
+|引数
+|@PathVariable, @RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`processJoinRequest`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<ProcessJoinRequestResponseDto>
+|処理成功時に結果情報を返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|* パスパラメータから申請ID（requestId）を取得  
+* リクエストボディからアクションとコメントを DTO（ProcessJoinRequestDto）として受け取る
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーの ID（userId）を取得する。
+
+|3
+|サービス呼び出し
+|`clubService.processJoinRequest(requestId, requestDto, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `ProcessJoinRequestResponseDto` を `ResponseEntity.ok().body(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* バリデーションエラーが発生した場合は適切なメッセージIDを返す  
+* 権限エラーや申請状態エラーの場合は適切なメッセージIDを返す
+|===
+
+== Service定義
+
+=== インターフェース
+
+`ClubService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|processJoinRequest
+|Long requestId, ProcessJoinRequestDto, Long adminUserId
+|ProcessJoinRequestResponseDto
+|参加申請を承認または拒否し、適切な処理を実行する。
+|===
+
+=== 実装クラス
+
+`ClubServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|clubRepository
+|ClubRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+
+|clubMemberRepository
+|ClubMemberRepository
+|クラブメンバー管理に使用
+
+|clubJoinRequestRepository
+|ClubJoinRequestRepository
+|参加申請管理に使用
+
+|clubPermissionService
+|ClubPermissionService
+|権限チェックに使用
+
+|clubNotificationService
+|ClubNotificationService
+|通知送信に使用
+
+|userRepository
+|UserRepository
+|ユーザー情報取得に使用
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== パラメータ
+
+|===
+|名称 |型 |説明
+
+|requestId
+|Long
+|処理対象の申請ID
+
+|requestDto
+|ProcessJoinRequestDto
+|処理内容（承認/拒否、コメント）
+
+|adminUserId
+|Long
+|処理実行ユーザーID（管理者）
+|===
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ProcessJoinRequestResponseDto
+|処理結果情報を含むDTO
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|申請情報取得
+|* `clubJoinRequestRepository.findByIdWithDetails(requestId)` で申請詳細を取得  
+* 存在しない場合は `JoinRequestNotFoundException` をスロー → `MSG_CLB_0012`
+
+|2
+|申請状態確認
+|* request.status が PENDING 以外の場合は `AlreadyProcessedException` をスロー → `MSG_CLB_0016`
+
+|3
+|管理者権限確認
+|* `clubPermissionService.validateClubAdminPermission(adminUserId, request.clubId)` で権限を確認  
+* 権限がない場合は `InsufficientPermissionException` をスロー → `MSG_CLB_0003`
+
+|4
+|承認処理（action = APPROVE）
+|==== 4-1. メンバーシップ重複確認 ====  
+* `clubMemberRepository.findByUserIdAndClubId(request.userId, request.clubId)` でメンバーシップを確認  
+* 既にメンバーの場合は `AlreadyMemberException` をスロー → `MSG_CLB_0008`  
+
+==== 4-2. メンバー登録 ====  
+* ClubMemberEntity を生成：  
+** userId: request.userId  
+** clubId: request.clubId  
+** role: ClubRole.MEMBER（デフォルト）  
+** createdAt, updatedAt: 現在日時  
+* `clubMemberRepository.insertMember(memberEntity)` でメンバーとして登録  
+
+==== 4-3. 申請ステータス更新 ====  
+* `clubJoinRequestRepository.updateRequestStatus(requestId, APPROVED, 現在日時)` でステータス更新  
+
+==== 4-4. 承認通知 ====  
+* `clubNotificationService.notifyJoinRequestApproved(request.userId, request.clubId)` で申請者に通知
+
+|5
+|拒否処理（action = REJECT）
+|==== 5-1. 申請ステータス更新 ====  
+* `clubJoinRequestRepository.updateRequestStatus(requestId, REJECTED, 現在日時)` でステータス更新  
+
+==== 5-2. 拒否通知 ====  
+* `clubNotificationService.notifyJoinRequestRejected(request.userId, request.clubId)` で申請者に通知
+
+|6
+|レスポンス生成
+|ProcessJoinRequestResponseDto に以下の情報を設定して返却：  
+* requestId: 処理された申請ID  
+* action: 実行されたアクション  
+* applicant: 申請者情報（UserInfoDto）  
+* club: 対象クラブ情報（ClubDto）  
+* processedAt: 処理日時  
+* message: 承認時「参加を承認しました。」/ 拒否時「参加を拒否しました。」
+
+|–
+|エラー処理
+|* トランザクション内でエラーが発生した場合はロールバック  
+* 各種例外をスローし、エラーメッセージを返す
+|===
+
+== Repository定義
+
+=== ClubJoinRequestRepository（追加メソッド）
+
+共通定義に加えて、以下のメソッドを使用：
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findByIdWithDetails
+|Long requestId
+|Optional<ClubJoinRequestWithDetailsDto>
+|申請詳細（ユーザー情報・クラブ情報含む）を取得
+
+|updateRequestStatus
+|Long requestId, JoinRequestStatus status, LocalDateTime respondedAt
+|void
+|申請ステータスと処理日時を更新
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 申請詳細取得
+
+[source,sql]
+----
+SELECT 
+    r.id,
+    r.user_id,
+    r.club_id,
+    r.status,
+    r.requested_at,
+    r.responded_at,
+    u.email as user_email,
+    up.name as user_name,
+    c.name as club_name
+FROM club_join_requests r
+JOIN users u ON r.user_id = u.id
+JOIN user_profiles up ON u.id = up.user_id
+JOIN clubs c ON r.club_id = c.id
+WHERE r.id = #{requestId}
+----
+
+==== 申請ステータス更新
+
+[source,sql]
+----
+UPDATE club_join_requests
+SET status = #{status},
+    responded_at = #{respondedAt},
+    updated_at = NOW()
+WHERE id = #{requestId}
+----
+
+== 通知機能
+
+=== 承認時の通知
+
+申請者に以下の内容で通知を送信：
+
+* **件名**: 「【剣道大会管理システム】クラブ参加が承認されました」
+* **内容**: クラブ名、承認日時、利用開始案内
+* **送信方法**: アプリ内通知 + メール通知
+
+=== 拒否時の通知
+
+申請者に以下の内容で通知を送信：
+
+* **件名**: 「【剣道大会管理システム】クラブ参加申請について」
+* **内容**: クラブ名、拒否理由（コメントがあれば）、再申請可能の案内
+* **送信方法**: アプリ内通知 + メール通知
+
+== 管理画面機能
+
+=== 申請一覧表示
+
+クラブ管理者は以下の情報で申請一覧を確認可能：
+
+* 申請者名・メールアドレス
+* 申請日時
+* 申請ステータス
+* 承認・拒否ボタン
+
+=== 一括処理機能（将来拡張）
+
+複数の申請を一括で承認・拒否する機能の追加を検討
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== 承認リクエスト
+```json
+PUT /api/clubs/join-requests/456
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "action": "APPROVE",
+    "comment": "経験豊富で良い方だと思います。"
+}
+```
+
+==== 拒否リクエスト
+```json
+PUT /api/clubs/join-requests/456
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "action": "REJECT",
+    "comment": "現在メンバー数が上限に達しているため。"
+}
+```
+
+==== 承認レスポンス
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "requestId": 456,
+    "action": "APPROVE",
+    "applicant": {
+        "id": 789,
+        "email": "tanaka@example.com",
+        "name": "田中太郎"
+    },
+    "club": {
+        "id": 1,
+        "name": "東京剣道クラブ",
+        "memberCount": 6
+    },
+    "processedAt": "2024-01-15T14:30:00",
+    "message": "参加を承認しました。"
+}
+```
+
+==== 拒否レスポンス
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "requestId": 456,
+    "action": "REJECT",
+    "applicant": {
+        "id": 789,
+        "email": "tanaka@example.com",
+        "name": "田中太郎"
+    },
+    "club": {
+        "id": 1,
+        "name": "東京剣道クラブ",
+        "memberCount": 5
+    },
+    "processedAt": "2024-01-15T14:30:00",
+    "message": "参加を拒否しました。"
+}
+```

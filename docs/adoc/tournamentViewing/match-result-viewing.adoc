@@ -1,0 +1,1379 @@
+= 試合結果閲覧API 詳細設計書
+
+== 概要
+
+matchResultViewingApi
+
+指定された試合の詳細結果を閲覧するAPI。
+個人戦・団体戦の詳細スコア、各選手の取得本数、反則情報等を提供し、ユーザーの権限に応じて表示内容を制御する。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[大会閲覧機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== MatchResultRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|matchId
+|Long
+|@NotNull
+|試合ID
+
+|includeDetails
+|Boolean
+|
+|詳細情報を含む（デフォルト：true）
+
+|includePlayerStats
+|Boolean
+|
+|選手統計を含む（デフォルト：false）
+
+|includeHistory
+|Boolean
+|
+|対戦履歴を含む（デフォルト：false）
+
+|format
+|ResultFormat
+|
+|表示形式（STANDARD/COMPACT/DETAILED）
+|===
+
+==== MatchResultResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|match
+|MatchDetailDto
+|試合基本情報
+
+|result
+|MatchResultDetailDto
+|試合結果詳細
+
+|playerStats
+|List<PlayerStatisticsDto>
+|選手統計情報（権限がある場合のみ）
+
+|history
+|MatchHistoryDto
+|対戦履歴情報（権限がある場合のみ）
+
+|relatedMatches
+|List<RelatedMatchDto>
+|関連試合一覧
+
+|accessPermissions
+|MatchAccessPermissionsDto
+|アクセス権限情報
+
+|viewHistory
+|MatchViewHistoryDto
+|閲覧履歴情報（ログイン時のみ）
+|===
+
+==== MatchDetailDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|試合ID
+
+|bracketId
+|Long
+|対戦組み合わせID
+
+|tournamentId
+|Long
+|大会ID
+
+|tournamentName
+|String
+|大会名
+
+|round
+|Integer
+|ラウンド番号
+
+|roundName
+|String
+|ラウンド名
+
+|matchNumber
+|Integer
+|試合番号
+
+|redEntry
+|MatchEntryDto
+|赤エントリー
+
+|whiteEntry
+|MatchEntryDto
+|白エントリー
+
+|status
+|MatchStatus
+|試合状況
+
+|scheduledTime
+|LocalDateTime
+|予定時刻
+
+|actualStartTime
+|LocalDateTime
+|実際の開始時刻
+
+|actualEndTime
+|LocalDateTime
+|実際の終了時刻
+
+|venue
+|String
+|試合会場
+
+|referee
+|RefereeDto
+|審判員情報
+
+|courtNumber
+|Integer
+|コート番号
+
+|round詳細
+|RoundDetailDto
+|ラウンド詳細情報
+
+|environment
+|MatchEnvironmentDto
+|試合環境情報
+|===
+
+==== MatchResultDetailDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|結果ID
+
+|resultType
+|ResultType
+|結果種別（PERSONAL/TEAM）
+
+|winner
+|String
+|勝者（"red", "white", "draw"）
+
+|redScore
+|Integer
+|赤の得点
+
+|whiteScore
+|Integer
+|白の得点
+
+|duration
+|String
+|試合時間
+
+|matchMethod
+|MatchMethod
+|決着方法（一本勝ち、判定等）
+
+|personalResults
+|List<PersonalMatchDetailDto>
+|個人戦詳細結果
+
+|teamResults
+|TeamMatchDetailDto
+|団体戦詳細結果
+
+|scoreBreakdown
+|ScoreBreakdownDto
+|スコア内訳
+
+|penalties
+|List<PenaltyDto>
+|反則一覧
+
+|specialEvents
+|List<SpecialEventDto>
+|特別事象（不戦勝等）
+
+|recordedBy
+|UserDto
+|記録者情報
+
+|recordedAt
+|LocalDateTime
+|記録日時
+
+|publishedAt
+|LocalDateTime
+|公開日時
+
+|isOfficial
+|Boolean
+|公式記録フラグ
+
+|verificationStatus
+|VerificationStatus
+|検証ステータス
+|===
+
+==== PersonalMatchDetailDto
+
+|===
+|フィールド名 |型 |説明
+
+|position
+|PositionType
+|ポジション（先鋒、次鋒等）
+
+|redPlayer
+|PlayerDetailDto
+|赤側選手
+
+|whitePlayer
+|PlayerDetailDto
+|白側選手
+
+|winner
+|String
+|勝者（"red", "white", "draw"）
+
+|redScore
+|Integer
+|赤側スコア
+
+|whiteScore
+|Integer
+|白側スコア
+
+|redPoints
+|List<ScoringPointDto>
+|赤側取得本数詳細
+
+|whitePoints
+|List<ScoringPointDto>
+|白側取得本数詳細
+
+|redPenalties
+|List<PenaltyDetailDto>
+|赤側反則詳細
+
+|whitePenalties
+|List<PenaltyDetailDto>
+|白側反則詳細
+
+|duration
+|String
+|試合時間
+
+|endCondition
+|EndCondition
+|終了条件
+
+|specialNotes
+|String
+|特記事項
+
+|isKeyMatch
+|Boolean
+|勝敗を決した試合フラグ
+|===
+
+==== PlayerDetailDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|選手ID
+
+|name
+|String
+|選手名
+
+|clubName
+|String
+|所属クラブ名
+
+|rank
+|String
+|段位
+
+|age
+|Integer
+|年齢（公開設定の場合のみ）
+
+|experience
+|Integer
+|競技歴（年数）
+
+|previousResults
+|List<PreviousResultDto>
+|過去の実績
+
+|currentStats
+|PlayerCurrentStatsDto
+|今大会での統計
+
+|skillLevel
+|SkillLevel
+|技術レベル評価
+
+|specialties
+|List<String>
+|得意技
+
+|profileImage
+|String
+|プロフィール画像URL
+|===
+
+==== ScoringPointDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|ポイントID
+
+|scoreType
+|ScoreType
+|得点種別（MEN, KOTE, DOU, TSUKI）
+
+|timestamp
+|LocalDateTime
+|取得時刻
+
+|isValid
+|Boolean
+|有効フラグ
+
+|technique
+|String
+|技の詳細
+
+|distance
+|String
+|間合い
+
+|timing
+|String
+|タイミング
+
+|judges
+|List<JudgeDecisionDto>
+|審判の判定
+
+|videoTimestamp
+|String
+|映像タイムスタンプ（利用可能な場合）
+|===
+
+==== PenaltyDetailDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|反則ID
+
+|penaltyType
+|PenaltyType
+|反則種別
+
+|timestamp
+|LocalDateTime
+|発生時刻
+
+|reason
+|String
+|反則理由
+
+|severity
+|PenaltySeverity
+|重要度
+
+|isWarning
+|Boolean
+|警告フラグ
+
+|affectsScore
+|Boolean
+|スコアへの影響フラグ
+
+|refereeNotes
+|String
+|審判コメント
+|===
+
+==== TeamMatchDetailDto
+
+|===
+|フィールド名 |型 |説明
+
+|redTeam
+|TeamDetailDto
+|赤チーム詳細
+
+|whiteTeam
+|TeamDetailDto
+|白チーム詳細
+
+|finalScore
+|TeamScoreDto
+|最終スコア
+
+|matchFlow
+|List<MatchEventDto>
+|試合進行
+
+|keyMoments
+|List<KeyMomentDto>
+|注目場面
+
+|teamStrategy
+|TeamStrategyDto
+|チーム戦術情報
+
+|substitutions
+|List<SubstitutionDto>
+|選手交代情報
+
+|teamPenalties
+|List<TeamPenaltyDto>
+|チーム反則
+
+|coaching
+|CoachingInfoDto
+|指導情報
+|===
+
+==== MatchAccessPermissionsDto
+
+|===
+|フィールド名 |型 |説明
+
+|canViewBasicResult
+|Boolean
+|基本結果閲覧可能
+
+|canViewDetailedScore
+|Boolean
+|詳細スコア閲覧可能
+
+|canViewPlayerInfo
+|Boolean
+|選手情報閲覧可能
+
+|canViewStatistics
+|Boolean
+|統計情報閲覧可能
+
+|canViewHistory
+|Boolean
+|履歴情報閲覧可能
+
+|canExportData
+|Boolean
+|データエクスポート可能
+
+|canViewVideo
+|Boolean
+|映像閲覧可能
+
+|accessLevel
+|String
+|アクセスレベル（PUBLIC/MEMBER/OFFICIAL）
+
+|restrictions
+|List<String>
+|制限事項一覧
+|===
+
+=== Enum定義
+
+==== ResultFormat
+
+|===
+|値 |説明
+
+|STANDARD
+|標準表示
+
+|COMPACT
+|コンパクト表示
+
+|DETAILED
+|詳細表示
+
+|MOBILE
+|モバイル最適化表示
+|===
+
+==== MatchMethod
+
+|===
+|値 |説明
+
+|IPPON
+|一本勝ち
+
+|WAZA_ARI
+|技あり勝ち
+
+|DECISION
+|判定勝ち
+
+|HANSOKU
+|反則勝ち
+
+|FUSEN
+|不戦勝
+
+|DRAW
+|引き分け
+|===
+
+==== EndCondition
+
+|===
+|値 |説明
+
+|TIME_UP
+|時間切れ
+
+|IPPON
+|一本
+
+|HANSOKU
+|反則
+
+|INJURY
+|怪我による終了
+
+|WITHDRAWAL
+|棄権
+|===
+
+==== ScoreType
+
+|===
+|値 |説明
+
+|MEN
+|面
+
+|KOTE
+|小手
+
+|DOU
+|胴
+
+|TSUKI
+|突き
+|===
+
+==== PenaltyType
+
+|===
+|値 |説明
+
+|MUBOBI
+|無防備
+
+|JOGAI
+|場外
+
+|HANTEI_IZON
+|判定依存
+
+|HANSOKU
+|反則
+
+|SHUBAI
+|試合放棄
+
+|OTHER
+|その他
+|===
+
+==== VerificationStatus
+
+|===
+|値 |説明
+
+|UNVERIFIED
+|未検証
+
+|VERIFIED
+|検証済み
+
+|DISPUTED
+|異議申し立て中
+
+|CONFIRMED
+|確定
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|matchIdがnullの場合
+|試合IDは必須です。
+|MSG_VIEW_0009
+|400
+
+|2
+|指定された試合が見つからない場合
+|指定された試合が見つかりません。
+|MSG_VIEW_0009
+|404
+
+|3
+|試合結果が公開されていない場合
+|試合結果は公開されていません。
+|MSG_VIEW_0008
+|403
+
+|4
+|試合結果の閲覧権限がない場合
+|この試合結果を閲覧する権限がありません。
+|MSG_VIEW_0010
+|403
+
+|5
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`MatchResultController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|matchResultService
+|MatchResultService
+|試合結果閲覧処理を行うサービス。`@RequiredArgsConstructor` によりインジェクション。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/matches/{matchId}/result"), @RequiredArgsConstructor
+
+|メソッド（試合結果取得）
+|@GetMapping
+
+|メソッド（選手統計取得）
+|@GetMapping("/statistics")
+
+|メソッド（対戦履歴取得）
+|@GetMapping("/history")
+
+|引数
+|@PathVariable, @RequestParam, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+* `getMatchResult` - 試合結果取得
+* `getPlayerStatistics` - 選手統計取得
+* `getMatchHistory` - 対戦履歴取得
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|getMatchResult
+|ResponseEntity<MatchResultResponseDto>
+|試合結果詳細を返却
+
+|getPlayerStatistics
+|ResponseEntity<List<PlayerStatisticsDto>>
+|選手統計情報を返却
+
+|getMatchHistory
+|ResponseEntity<MatchHistoryDto>
+|対戦履歴を返却
+|===
+
+=== 処理詳細
+
+==== getMatchResult
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|パスパラメータから試合ID、クエリパラメータから表示オプションを取得。
+
+|2
+|ユーザー情報取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーIDを取得する（任意）。
+
+|3
+|権限確認
+|tournamentViewPermissionService.validateResultAccess() で試合結果閲覧権限を確認。
+
+|4
+|サービス呼び出し
+|matchResultService.getMatchResult(matchId, requestDto, userId) を呼び出す。
+
+|5
+|閲覧履歴記録
+|ログイン済みユーザーの場合、閲覧履歴を記録。
+
+|6
+|レスポンス生成
+|試合結果詳細を含む MatchResultResponseDto を返却する。
+
+|–
+|エラー処理
+|* 試合が見つからない場合は MSG_VIEW_0009 を返却  
+* 結果が公開されていない場合は MSG_VIEW_0008 を返却  
+* 閲覧権限がない場合は MSG_VIEW_0010 を返却
+|===
+
+== Service定義
+
+=== インターフェース
+
+`MatchResultService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|getMatchResult
+|Long matchId, MatchResultRequestDto, Long userId
+|MatchResultResponseDto
+|試合結果詳細を取得し、権限に応じた情報を返却する
+
+|getPlayerStatistics
+|Long matchId, Long userId
+|List<PlayerStatisticsDto>
+|選手統計情報を取得する
+
+|getMatchHistory
+|Long matchId, Long userId
+|MatchHistoryDto
+|対戦履歴を取得する
+
+|getRelatedMatches
+|Long matchId, Long userId, Integer limit
+|List<RelatedMatchDto>
+|関連試合一覧を取得する
+
+|recordViewHistory
+|Long matchId, Long userId
+|void
+|閲覧履歴を記録する
+|===
+
+=== 実装クラス
+
+`MatchResultServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|matchResultRepository
+|MatchResultRepository
+|試合結果データ取得用リポジトリ
+
+|matchResultPermissionService
+|MatchResultPermissionService
+|権限チェック用サービス
+
+|playerStatisticsService
+|PlayerStatisticsService
+|選手統計計算用サービス
+
+|matchHistoryService
+|MatchHistoryService
+|対戦履歴取得用サービス
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor
+|===
+
+=== 処理詳細
+
+==== getMatchResult
+
+|===
+|順序 |概要 |詳細
+
+|1
+|試合情報取得・権限確認
+|* matchResultRepository.findMatchDetails(matchId, userId) で試合詳細を取得  
+* 試合が見つからない場合は `MatchNotFoundException` をスロー → `MSG_VIEW_0009`  
+* matchResultPermissionService.validateResultAccess(matchId, userId) で閲覧権限を確認  
+* 権限がない場合は `AccessDeniedException` をスロー → `MSG_VIEW_0010`
+
+|2
+|結果公開状況確認
+|* 試合結果が公開されているかチェック  
+* 公開されていない場合は `ResultNotPublicException` をスロー → `MSG_VIEW_0008`
+
+|3
+|アクセス権限情報生成
+|* 各種情報への詳細なアクセス権限を判定：  
+** canViewDetailedScore: 詳細スコア閲覧権限  
+** canViewPlayerInfo: 選手情報閲覧権限  
+** canViewStatistics: 統計情報閲覧権限  
+** canViewHistory: 履歴情報閲覧権限
+
+|4
+|試合結果詳細取得
+|* 基本的な試合結果情報を取得  
+* 権限に応じて詳細レベルを調整
+
+|5
+|個人戦詳細情報取得
+|* includeDetails が true かつ権限がある場合：  
+** 各選手の詳細情報を取得  
+** 取得本数、反則、特記事項等の詳細を含む
+
+|6
+|選手統計情報取得
+|* includePlayerStats が true かつ権限がある場合：  
+** getPlayerStatistics(matchId, userId) を呼び出し  
+** 今大会での統計、過去の実績等を取得
+
+|7
+|対戦履歴取得
+|* includeHistory が true かつ権限がある場合：  
+** getMatchHistory(matchId, userId) を呼び出し  
+** 両エントリーの過去対戦履歴を取得
+
+|8
+|関連試合取得
+|* getRelatedMatches(matchId, userId, 5) で関連試合を取得：  
+** 同一大会の他の試合  
+** 同じエントリー同士の過去の試合  
+** 同ラウンドの他の試合
+
+|9
+|閲覧履歴記録
+|* recordViewHistory(matchId, userId) で閲覧履歴を記録  
+* アクセス統計の更新
+
+|10
+|レスポンス生成
+|MatchResultResponseDto に以下の情報を設定して返却：  
+* match: 試合基本情報  
+* result: 試合結果詳細  
+* playerStats: 選手統計情報（権限がある場合のみ）  
+* history: 対戦履歴情報（権限がある場合のみ）  
+* relatedMatches: 関連試合一覧  
+* accessPermissions: アクセス権限情報  
+* viewHistory: 閲覧履歴情報（ログイン時のみ）
+
+|–
+|エラー処理
+|* 各種例外をスローし、エラーメッセージを返す  
+* 部分的な情報取得エラーは警告ログ出力後、利用可能な情報のみで継続
+|===
+
+== Repository定義
+
+=== 使用メソッド
+
+==== MatchResultRepository（拡張）
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findMatchResultWithDetails
+|Long matchId, Long userId
+|Optional<MatchResultDetailDto>
+|権限を考慮した試合結果詳細を取得
+
+|findPersonalMatchDetails
+|Long matchId, Long userId
+|List<PersonalMatchDetailDto>
+|個人戦詳細結果を取得
+
+|findTeamMatchDetails
+|Long matchId, Long userId
+|Optional<TeamMatchDetailDto>
+|団体戦詳細結果を取得
+
+|findRelatedMatches
+|Long matchId, String criteria, Integer limit
+|List<RelatedMatchDto>
+|関連試合を取得
+
+|recordMatchView
+|Long matchId, Long userId, LocalDateTime viewedAt
+|void
+|閲覧履歴を記録
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 試合結果詳細取得
+
+[source,sql]
+----
+-- 基本試合情報と結果
+SELECT 
+    m.id as match_id,
+    m.bracket_id,
+    m.tournament_id,
+    t.name as tournament_name,
+    b.round,
+    b.round_name,
+    b.match_number,
+    -- 赤エントリー情報
+    red_te.team_name as red_name,
+    red_c.name as red_club_name,
+    -- 白エントリー情報
+    white_te.team_name as white_name,
+    white_c.name as white_club_name,
+    -- 試合結果
+    mr.id as result_id,
+    mr.result_type,
+    mr.winner,
+    mr.red_score,
+    mr.white_score,
+    mr.result_data,
+    mr.recorded_by,
+    mr.recorded_at,
+    mr.published_at,
+    mr.is_official,
+    -- 権限チェック
+    CASE 
+        WHEN mr.is_public = true THEN true
+        WHEN #{userId} IS NOT NULL AND EXISTS (
+            SELECT 1 FROM club_members cm 
+            WHERE cm.club_id = t.host_club_id AND cm.user_id = #{userId}
+        ) THEN true
+        ELSE false
+    END as can_view_detailed_result
+FROM matches m
+JOIN tournament_brackets b ON m.bracket_id = b.id
+JOIN tournaments t ON b.tournament_id = t.id
+LEFT JOIN tournament_team_entries red_te ON b.red_entry_id = red_te.id
+LEFT JOIN clubs red_c ON red_te.club_id = red_c.id
+LEFT JOIN tournament_team_entries white_te ON b.white_entry_id = white_te.id
+LEFT JOIN clubs white_c ON white_te.club_id = white_c.id
+LEFT JOIN match_results mr ON m.id = mr.match_id
+WHERE m.id = #{matchId}
+  AND mr.is_public = true
+----
+
+==== 個人戦詳細結果取得
+
+[source,sql]
+----
+SELECT 
+    pmr.id,
+    pmr.match_id,
+    pmr.position,
+    pmr.red_player_id,
+    pmr.white_player_id,
+    pmr.winner,
+    pmr.red_score,
+    pmr.white_score,
+    pmr.duration,
+    pmr.end_condition,
+    pmr.special_notes,
+    -- 赤側選手情報
+    red_p.first_name as red_first_name,
+    red_p.last_name as red_last_name,
+    red_p.rank as red_rank,
+    red_p.club_name as red_club_name,
+    -- 白側選手情報
+    white_p.first_name as white_first_name,
+    white_p.last_name as white_last_name,
+    white_p.rank as white_rank,
+    white_p.club_name as white_club_name,
+    -- 取得本数詳細（JSON形式）
+    COALESCE(red_scores.scoring_details, '[]') as red_scoring_details,
+    COALESCE(white_scores.scoring_details, '[]') as white_scoring_details,
+    -- 反則詳細（JSON形式）
+    COALESCE(red_penalties.penalty_details, '[]') as red_penalty_details,
+    COALESCE(white_penalties.penalty_details, '[]') as white_penalty_details
+FROM personal_match_results pmr
+LEFT JOIN personal_matches red_p ON pmr.red_player_id = red_p.id
+LEFT JOIN personal_matches white_p ON pmr.white_player_id = white_p.id
+LEFT JOIN (
+    SELECT 
+        player_id,
+        match_id,
+        JSON_ARRAYAGG(
+            JSON_OBJECT(
+                'scoreType', score_type,
+                'timestamp', timestamp,
+                'technique', technique,
+                'isValid', is_valid
+            )
+        ) as scoring_details
+    FROM scoring_points 
+    WHERE match_id = #{matchId}
+    GROUP BY player_id, match_id
+) red_scores ON pmr.red_player_id = red_scores.player_id AND pmr.match_id = red_scores.match_id
+LEFT JOIN (
+    SELECT 
+        player_id,
+        match_id,
+        JSON_ARRAYAGG(
+            JSON_OBJECT(
+                'scoreType', score_type,
+                'timestamp', timestamp,
+                'technique', technique,
+                'isValid', is_valid
+            )
+        ) as scoring_details
+    FROM scoring_points 
+    WHERE match_id = #{matchId}
+    GROUP BY player_id, match_id
+) white_scores ON pmr.white_player_id = white_scores.player_id AND pmr.match_id = white_scores.match_id
+LEFT JOIN (
+    SELECT 
+        player_id,
+        match_id,
+        JSON_ARRAYAGG(
+            JSON_OBJECT(
+                'penaltyType', penalty_type,
+                'timestamp', timestamp,
+                'reason', reason,
+                'severity', severity
+            )
+        ) as penalty_details
+    FROM penalties 
+    WHERE match_id = #{matchId}
+    GROUP BY player_id, match_id
+) red_penalties ON pmr.red_player_id = red_penalties.player_id AND pmr.match_id = red_penalties.match_id
+LEFT JOIN (
+    SELECT 
+        player_id,
+        match_id,
+        JSON_ARRAYAGG(
+            JSON_OBJECT(
+                'penaltyType', penalty_type,
+                'timestamp', timestamp,
+                'reason', reason,
+                'severity', severity
+            )
+        ) as penalty_details
+    FROM penalties 
+    WHERE match_id = #{matchId}
+    GROUP BY player_id, match_id
+) white_penalties ON pmr.white_player_id = white_penalties.player_id AND pmr.match_id = white_penalties.match_id
+WHERE pmr.match_id = #{matchId}
+ORDER BY pmr.position
+----
+
+==== 関連試合取得
+
+[source,sql]
+----
+-- 同一エントリー同士の過去対戦
+SELECT 
+    m.id,
+    t.name as tournament_name,
+    b.round_name,
+    b.match_number,
+    mr.winner,
+    mr.red_score,
+    mr.white_score,
+    mr.recorded_at,
+    'SAME_ENTRIES' as relation_type
+FROM matches m
+JOIN tournament_brackets b ON m.bracket_id = b.id
+JOIN tournaments t ON b.tournament_id = t.id
+JOIN match_results mr ON m.id = mr.match_id
+WHERE m.id != #{matchId}
+  AND mr.is_public = true
+  AND (
+    (b.red_entry_id = #{redEntryId} AND b.white_entry_id = #{whiteEntryId}) OR
+    (b.red_entry_id = #{whiteEntryId} AND b.white_entry_id = #{redEntryId})
+  )
+
+UNION ALL
+
+-- 同一大会の同ラウンド他試合
+SELECT 
+    m.id,
+    t.name as tournament_name,
+    b.round_name,
+    b.match_number,
+    mr.winner,
+    mr.red_score,
+    mr.white_score,
+    mr.recorded_at,
+    'SAME_ROUND' as relation_type
+FROM matches m
+JOIN tournament_brackets b ON m.bracket_id = b.id
+JOIN tournaments t ON b.tournament_id = t.id
+JOIN match_results mr ON m.id = mr.match_id
+WHERE m.id != #{matchId}
+  AND b.tournament_id = #{tournamentId}
+  AND b.round = #{round}
+  AND mr.is_public = true
+
+ORDER BY recorded_at DESC
+LIMIT #{limit}
+----
+
+== 権限制御詳細
+
+=== 閲覧権限レベル
+
+* **PUBLIC**: 基本結果のみ（勝敗、最終スコア）
+* **MEMBER**: 詳細スコア、選手情報
+* **OFFICIAL**: 全詳細情報（審判コメント、映像等）
+
+=== 情報表示制御
+
+```java
+// 権限に応じた情報フィルタリング例
+public MatchResultDetailDto filterByPermission(MatchResultDetailDto result, String accessLevel) {
+    switch (accessLevel) {
+        case "PUBLIC":
+            result.setPersonalResults(filterBasicOnly(result.getPersonalResults()));
+            result.setPenalties(null);
+            result.setSpecialEvents(null);
+            break;
+        case "MEMBER":
+            result.setRefereeNotes(null);
+            result.setVerificationDetails(null);
+            break;
+        case "OFFICIAL":
+            // 全情報表示
+            break;
+    }
+    return result;
+}
+```
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== 試合結果取得リクエスト
+
+```
+GET /api/matches/789/result?includeDetails=true&includePlayerStats=true&format=DETAILED
+Authorization: Bearer {jwt-token}
+```
+
+==== 試合結果取得レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "match": {
+        "id": 789,
+        "bracketId": 123,
+        "tournamentId": 456,
+        "tournamentName": "第30回 全日本剣道選手権大会",
+        "round": 2,
+        "roundName": "2回戦",
+        "matchNumber": 3,
+        "redEntry": {
+            "id": 111,
+            "name": "東京剣道クラブA",
+            "clubName": "東京剣道クラブ",
+            "seed": 1
+        },
+        "whiteEntry": {
+            "id": 222,
+            "name": "大阪剣道クラブB", 
+            "clubName": "大阪剣道クラブ",
+            "seed": 8
+        },
+        "status": "COMPLETED",
+        "scheduledTime": "2024-03-15T10:30:00",
+        "actualStartTime": "2024-03-15T10:35:00",
+        "actualEndTime": "2024-03-15T11:20:00",
+        "venue": "Aコート",
+        "referee": {
+            "name": "田中審判",
+            "rank": "八段",
+            "certification": "全日本剣道連盟公認"
+        }
+    },
+    "result": {
+        "id": 789,
+        "resultType": "TEAM",
+        "winner": "red",
+        "redScore": 3,
+        "whiteScore": 2,
+        "duration": "45分",
+        "matchMethod": "DECISION",
+        "personalResults": [
+            {
+                "position": "先鋒",
+                "redPlayer": {
+                    "id": 1001,
+                    "name": "山田太郎",
+                    "clubName": "東京剣道クラブ",
+                    "rank": "三段",
+                    "currentStats": {
+                        "wins": 2,
+                        "losses": 0,
+                        "totalIppon": 3
+                    }
+                },
+                "whitePlayer": {
+                    "id": 2001,
+                    "name": "佐藤次郎",
+                    "clubName": "大阪剣道クラブ",
+                    "rank": "三段"
+                },
+                "winner": "red",
+                "redScore": 2,
+                "whiteScore": 0,
+                "redPoints": [
+                    {
+                        "scoreType": "MEN",
+                        "timestamp": "2024-03-15T10:38:30",
+                        "isValid": true,
+                        "technique": "正面打ち",
+                        "distance": "一足一刀",
+                        "timing": "出鼻"
+                    },
+                    {
+                        "scoreType": "KOTE",
+                        "timestamp": "2024-03-15T10:41:15",
+                        "isValid": true,
+                        "technique": "右小手",
+                        "distance": "近間",
+                        "timing": "返し技"
+                    }
+                ],
+                "whitePoints": [],
+                "duration": "3分45秒",
+                "endCondition": "IPPON",
+                "isKeyMatch": true
+            }
+        ],
+        "teamResults": {
+            "redTeam": {
+                "name": "東京剣道クラブA",
+                "finalWins": 3,
+                "totalIppon": 6,
+                "strategy": "攻撃的戦術"
+            },
+            "whiteTeam": {
+                "name": "大阪剣道クラブB",
+                "finalWins": 2,
+                "totalIppon": 4,
+                "strategy": "守備重視戦術"
+            }
+        },
+        "recordedBy": {
+            "name": "記録係A",
+            "role": "大会運営"
+        },
+        "recordedAt": "2024-03-15T11:25:00",
+        "publishedAt": "2024-03-15T11:30:00",
+        "isOfficial": true,
+        "verificationStatus": "VERIFIED"
+    },
+    "playerStats": [
+        {
+            "playerId": 1001,
+            "name": "山田太郎",
+            "tournamentStats": {
+                "matchesPlayed": 3,
+                "wins": 3,
+                "losses": 0,
+                "totalIppon": 5,
+                "menCount": 3,
+                "koteCount": 2,
+                "averageMatchTime": "3分20秒"
+            }
+        }
+    ],
+    "relatedMatches": [
+        {
+            "id": 456,
+            "tournamentName": "第29回 全日本剣道選手権大会",
+            "roundName": "準決勝",
+            "redName": "東京剣道クラブA",
+            "whiteName": "大阪剣道クラブB",
+            "winner": "white",
+            "recordedAt": "2023-03-15T15:30:00",
+            "relationType": "SAME_ENTRIES"
+        }
+    ],
+    "accessPermissions": {
+        "canViewBasicResult": true,
+        "canViewDetailedScore": true,
+        "canViewPlayerInfo": true,
+        "canViewStatistics": true,
+        "canViewHistory": true,
+        "canExportData": false,
+        "canViewVideo": false,
+        "accessLevel": "MEMBER",
+        "restrictions": []
+    },
+    "viewHistory": {
+        "firstViewedAt": "2024-03-15T11:35:00",
+        "viewCount": 1,
+        "lastViewedFrom": "東京都"
+    }
+}
+```
+
+==== 選手統計取得リクエスト
+
+```
+GET /api/matches/789/result/statistics
+Authorization: Bearer {jwt-token}
+```
+
+==== 対戦履歴取得リクエスト
+
+```
+GET /api/matches/789/result/history
+Authorization: Bearer {jwt-token}
+```

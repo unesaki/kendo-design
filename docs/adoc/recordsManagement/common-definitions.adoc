@@ -1,0 +1,1078 @@
+= 記録管理機能 共通定義
+
+== 概要
+
+記録管理機能で共通して使用されるEntity、Dto、エラーメッセージ等を定義する。
+各機能の詳細設計書では、この共通定義を参照することで重複を避ける。
+
+== 共通Entity定義
+
+=== PersonalMatchRecordEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|個人戦記録ID（自動採番）
+
+|userId
+|Long
+|記録登録ユーザーID
+
+|clubId
+|Long
+|現在選択中クラブID（クラブ公開の場合のみ）
+
+|tournamentName
+|String
+|大会名
+
+|matchDate
+|LocalDate
+|試合日
+
+|round
+|String
+|ラウンド（例：準決勝）
+
+|redPlayerName
+|String
+|赤選手名
+
+|redPlayerClub
+|String
+|赤選手所属クラブ名
+
+|redPlayerScores
+|String
+|赤選手スコア（カンマ区切りで最大2つ）
+
+|redPlayerHasPenalty
+|Boolean
+|赤選手の▲（反則）が含まれる場合 true
+
+|whitePlayerName
+|String
+|白選手名
+
+|whitePlayerClub
+|String
+|白選手所属クラブ名
+
+|whitePlayerScores
+|String
+|白選手スコア（カンマ区切りで最大2つ）
+
+|whitePlayerHasPenalty
+|Boolean
+|白選手の▲（反則）が含まれる場合 true
+
+|visibility
+|RecordVisibility
+|公開設定
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== TeamMatchRecordEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|団体戦記録ID（自動採番）
+
+|userId
+|Long
+|記録登録ユーザーID
+
+|clubId
+|Long
+|現在選択中クラブID（クラブ公開の場合のみ）
+
+|tournamentName
+|String
+|大会名
+
+|matchDate
+|LocalDate
+|試合日
+
+|round
+|String
+|ラウンド（例：準決勝）
+
+|redTeamName
+|String
+|赤チーム名
+
+|whiteTeamName
+|String
+|白チーム名
+
+|visibility
+|RecordVisibility
+|公開設定
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== TeamMatchMemberEntity
+
+|===
+|フィールド名 |型 |説明
+
+|recordId
+|Long
+|団体戦記録ID（TeamMatchRecordEntity.id）
+
+|teamColor
+|TeamColor
+|チーム色
+
+|position
+|PlayerPosition
+|ポジション
+
+|playerName
+|String
+|選手名
+
+|scores
+|String
+|スコア（カンマ区切りで最大2つ）
+
+|hasPenalty
+|Boolean
+|▲（反則）が含まれる場合 true
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== RecordEditRequestEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|編集申請ID（自動採番）
+
+|recordType
+|RecordType
+|記録種別（個人戦/団体戦）
+
+|recordId
+|Long
+|対象記録ID
+
+|requestType
+|EditRequestType
+|申請種別（編集/削除）
+
+|requestData
+|String
+|変更内容（JSON形式）
+
+|reason
+|String
+|申請理由
+
+|status
+|EditRequestStatus
+|申請状態
+
+|requestedBy
+|Long
+|申請者ID
+
+|requestedAt
+|LocalDateTime
+|申請日時
+
+|processedBy
+|Long
+|処理者ID（任意）
+
+|processedAt
+|LocalDateTime
+|処理日時（任意）
+
+|processComment
+|String
+|処理コメント（任意）
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+== 共通Enum定義
+
+=== RecordVisibility
+
+|===
+|値 |説明
+
+|PRIVATE
+|自分のみ閲覧可能（デフォルト）
+
+|CLUB
+|現在選択中のクラブのみに公開
+|===
+
+=== TeamColor
+
+|===
+|値 |表示名 |説明
+
+|RED
+|赤
+|赤チーム
+
+|WHITE
+|白
+|白チーム
+|===
+
+=== PlayerPosition
+
+|===
+|値 |表示名 |説明
+
+|SENPO
+|先鋒
+|1番手選手
+
+|JIHO
+|次鋒
+|2番手選手
+
+|CHUKEN
+|中堅
+|3番手選手
+
+|FUKUSHO
+|副将
+|4番手選手
+
+|TAISHO
+|大将
+|5番手選手
+|===
+
+=== ScoreType
+
+|===
+|値 |表示名 |説明
+
+|MEN
+|メ
+|面打ち
+
+|KOTE
+|コ
+|小手打ち
+
+|DOU
+|ド
+|胴打ち
+
+|TSUKI
+|ツ
+|突き
+
+|HAN
+|反
+|反則による得点
+
+|FUSEN
+|不
+|不戦勝（2本換算）
+
+|PENALTY
+|▲
+|反則（得点なし）
+|===
+
+=== RecordType
+
+|===
+|値 |説明
+
+|PERSONAL
+|個人戦記録
+
+|TEAM
+|団体戦記録
+|===
+
+=== EditRequestType
+
+|===
+|値 |説明
+
+|EDIT
+|編集申請
+
+|DELETE
+|削除申請
+|===
+
+=== EditRequestStatus
+
+|===
+|値 |説明
+
+|PENDING
+|申請中
+
+|APPROVED
+|承認済み
+
+|REJECTED
+|拒否済み
+
+|CANCELLED
+|申請取り消し
+|===
+
+== 共通Dto定義
+
+=== PersonalMatchRecordDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|記録ID
+
+|tournamentName
+|String
+|大会名
+
+|matchDate
+|LocalDate
+|試合日
+
+|round
+|String
+|ラウンド
+
+|redPlayer
+|PlayerDto
+|赤選手情報
+
+|whitePlayer
+|PlayerDto
+|白選手情報
+
+|visibility
+|RecordVisibility
+|公開設定
+
+|canEdit
+|Boolean
+|編集可能フラグ
+
+|canDelete
+|Boolean
+|削除可能フラグ
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== TeamMatchRecordDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|記録ID
+
+|tournamentName
+|String
+|大会名
+
+|matchDate
+|LocalDate
+|試合日
+
+|round
+|String
+|ラウンド
+
+|redTeamName
+|String
+|赤チーム名
+
+|whiteTeamName
+|String
+|白チーム名
+
+|redMembers
+|List<TeamMemberDto>
+|赤チーム選手一覧
+
+|whiteMembers
+|List<TeamMemberDto>
+|白チーム選手一覧
+
+|visibility
+|RecordVisibility
+|公開設定
+
+|canEdit
+|Boolean
+|編集可能フラグ
+
+|canDelete
+|Boolean
+|削除可能フラグ
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== PlayerDto
+
+|===
+|フィールド名 |型 |説明
+
+|name
+|String
+|選手名
+
+|clubName
+|String
+|所属クラブ名
+
+|scores
+|List<ScoreType>
+|取得スコア
+
+|totalPoints
+|Integer
+|合計得点
+
+|hasPenalty
+|Boolean
+|反則フラグ
+
+|isWinner
+|Boolean
+|勝利フラグ
+|===
+
+=== TeamMemberDto
+
+|===
+|フィールド名 |型 |説明
+
+|position
+|PlayerPosition
+|ポジション
+
+|positionDisplay
+|String
+|ポジション表示名
+
+|playerName
+|String
+|選手名
+
+|scores
+|List<ScoreType>
+|取得スコア
+
+|totalPoints
+|Integer
+|合計得点
+
+|hasPenalty
+|Boolean
+|反則フラグ
+
+|isWinner
+|Boolean
+|勝利フラグ
+|===
+
+=== RecordEditRequestDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|申請ID
+
+|recordType
+|RecordType
+|記録種別
+
+|recordId
+|Long
+|対象記録ID
+
+|requestType
+|EditRequestType
+|申請種別
+
+|requestTypeDisplay
+|String
+|申請種別表示名
+
+|requestData
+|Object
+|変更内容（型は申請種別による）
+
+|reason
+|String
+|申請理由
+
+|status
+|EditRequestStatus
+|申請状態
+
+|requestedBy
+|Long
+|申請者ID
+
+|requestedAt
+|LocalDateTime
+|申請日時
+
+|processedAt
+|LocalDateTime
+|処理日時
+
+|processComment
+|String
+|処理コメント
+|===
+
+=== RecordSearchCriteriaDto
+
+|===
+|フィールド名 |型 |説明
+
+|keyword
+|String
+|検索キーワード（大会名、選手名等）
+
+|dateFrom
+|LocalDate
+|試合日範囲（開始）
+
+|dateTo
+|LocalDate
+|試合日範囲（終了）
+
+|visibility
+|RecordVisibility
+|公開設定フィルター
+
+|recordType
+|RecordType
+|記録種別フィルター
+
+|playerName
+|String
+|選手名フィルター
+
+|clubName
+|String
+|クラブ名フィルター
+
+|page
+|Integer
+|ページ番号
+
+|size
+|Integer
+|ページサイズ
+|===
+
+== 共通バリデーション
+
+=== 大会名バリデーション
+
+|===
+|項目 |ルール |エラーメッセージID
+
+|必須チェック
+|@NotBlank
+|MSG_REC_0001
+
+|文字数制限
+|@Size(max=100)
+|MSG_REC_0007
+|===
+
+=== 選手名バリデーション
+
+|===
+|項目 |ルール |エラーメッセージID
+
+|必須チェック
+|@NotBlank
+|MSG_REC_0008
+
+|文字数制限
+|@Size(max=50)
+|MSG_REC_0009
+|===
+
+=== 試合日バリデーション
+
+|===
+|項目 |ルール |エラーメッセージID
+
+|必須チェック
+|@NotNull
+|MSG_REC_0002
+
+|未来日制限
+|@PastOrPresent
+|MSG_REC_0010
+|===
+
+=== スコアバリデーション
+
+|===
+|項目 |ルール |エラーメッセージID
+
+|個数制限
+|@Size(max=2)
+|MSG_REC_0006
+
+|反則重複禁止
+|カスタムバリデーション
+|MSG_REC_0011
+
+|不戦勝重複禁止
+|カスタムバリデーション
+|MSG_REC_0012
+|===
+
+== 共通エラーメッセージ一覧
+
+|===
+|メッセージID |エラー内容 |ステータス
+
+|MSG_REC_0001
+|大会名は必須です。
+|400
+
+|MSG_REC_0002
+|試合日は必須です。
+|400
+
+|MSG_REC_0003
+|ラウンド名は必須です。
+|400
+
+|MSG_REC_0004
+|チーム名は必須です。
+|400
+
+|MSG_REC_0005
+|各チームに5人必要です。
+|400
+
+|MSG_REC_0006
+|スコアは最大2つまでです。
+|400
+
+|MSG_REC_0007
+|大会名は100文字以内で入力してください。
+|400
+
+|MSG_REC_0008
+|選手名は必須です。
+|400
+
+|MSG_REC_0009
+|選手名は50文字以内で入力してください。
+|400
+
+|MSG_REC_0010
+|試合日は過去または現在の日付で入力してください。
+|400
+
+|MSG_REC_0011
+|反則は1つまでです。
+|400
+
+|MSG_REC_0012
+|不戦勝は他のスコアと同時に設定できません。
+|400
+
+|MSG_REC_0013
+|指定された記録が見つかりません。
+|404
+
+|MSG_REC_0014
+|この記録を編集する権限がありません。
+|403
+
+|MSG_REC_0015
+|この記録を削除する権限がありません。
+|403
+
+|MSG_REC_0016
+|クラブ公開する場合はクラブを選択してください。
+|400
+
+|MSG_REC_0017
+|申請理由は必須です。
+|400
+
+|MSG_REC_0018
+|申請理由は500文字以内で入力してください。
+|400
+
+|MSG_REC_0019
+|この記録は既に編集申請中です。
+|409
+
+|MSG_REC_0020
+|編集申請が見つかりません。
+|404
+
+|MSG_REC_0021
+|この申請を処理する権限がありません。
+|403
+
+|MSG_REC_0022
+|この申請は既に処理済みです。
+|409
+
+|MSG_REC_0023
+|無効なスコアが含まれています。
+|400
+
+|MSG_REC_0024
+|クラブ名は必須です。
+|400
+
+|MSG_REC_0025
+|検索キーワードは100文字以内で入力してください。
+|400
+
+|MSG_REC_0026
+|開始日は終了日より前の日付を指定してください。
+|400
+
+|MSG_REC_0027
+|ページ番号は0以上で指定してください。
+|400
+
+|MSG_REC_0028
+|ページサイズは1から100の間で指定してください。
+|400
+
+|MSG_REC_0029
+|この記録を閲覧する権限がありません。
+|403
+
+|MSG_REC_0030
+|記録種別は必須です。
+|400
+
+|MSG_REC_0031
+|記録IDは必須です。
+|400
+
+|MSG_REC_0032
+|編集種別は必須です。
+|400
+
+|MSG_REC_0033
+|編集内容は必須です。
+|400
+|===
+
+== 共通Service定義
+
+=== RecordPermissionService
+
+記録に関する権限チェックを行う共通サービス
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|canViewRecord
+|Long userId, Long recordId, RecordType recordType
+|Boolean
+|指定ユーザーが記録を閲覧可能かどうか
+
+|canEditRecord
+|Long userId, Long recordId, RecordType recordType
+|Boolean
+|指定ユーザーが記録を編集可能かどうか
+
+|canDeleteRecord
+|Long userId, Long recordId, RecordType recordType
+|Boolean
+|指定ユーザーが記録を削除可能かどうか
+
+|validateViewPermission
+|Long userId, Long recordId, RecordType recordType
+|void
+|閲覧権限をチェック（例外スロー）
+
+|validateEditPermission
+|Long userId, Long recordId, RecordType recordType
+|void
+|編集権限をチェック（例外スロー）
+
+|validateDeletePermission
+|Long userId, Long recordId, RecordType recordType
+|void
+|削除権限をチェック（例外スロー）
+|===
+
+=== RecordNotificationService
+
+記録関連の通知を行う共通サービス
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|notifyRecordShared
+|Long recordId, RecordType recordType, Long clubId
+|void
+|記録のクラブ公開を通知
+
+|notifyEditRequestSubmitted
+|Long requestId
+|void
+|編集申請提出を通知
+
+|notifyEditRequestProcessed
+|Long requestId, EditRequestStatus status
+|void
+|編集申請処理完了を通知
+|===
+
+== 共通Repository定義
+
+=== PersonalMatchRecordRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findByUserId
+|Long userId, Pageable pageable
+|Page<PersonalMatchRecordDto>
+|ユーザーの個人戦記録一覧を取得
+
+|findByClubId
+|Long clubId, Pageable pageable
+|Page<PersonalMatchRecordDto>
+|クラブ公開されている個人戦記録一覧を取得
+
+|findByIdWithDetails
+|Long recordId
+|Optional<PersonalMatchRecordDto>
+|個人戦記録詳細を取得
+
+|insertRecord
+|PersonalMatchRecordEntity
+|void
+|個人戦記録を登録
+
+|updateRecord
+|PersonalMatchRecordEntity
+|void
+|個人戦記録を更新
+
+|deleteRecord
+|Long recordId
+|void
+|個人戦記録を削除
+
+|searchRecords
+|RecordSearchCriteriaDto, Pageable
+|Page<PersonalMatchRecordDto>
+|条件に応じた個人戦記録検索
+|===
+
+=== TeamMatchRecordRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findByUserId
+|Long userId, Pageable pageable
+|Page<TeamMatchRecordDto>
+|ユーザーの団体戦記録一覧を取得
+
+|findByClubId
+|Long clubId, Pageable pageable
+|Page<TeamMatchRecordDto>
+|クラブ公開されている団体戦記録一覧を取得
+
+|findByIdWithDetails
+|Long recordId
+|Optional<TeamMatchRecordDto>
+|団体戦記録詳細（選手情報含む）を取得
+
+|insertRecord
+|TeamMatchRecordEntity
+|void
+|団体戦記録を登録
+
+|updateRecord
+|TeamMatchRecordEntity
+|void
+|団体戦記録を更新
+
+|deleteRecord
+|Long recordId
+|void
+|団体戦記録を削除
+
+|searchRecords
+|RecordSearchCriteriaDto, Pageable
+|Page<TeamMatchRecordDto>
+|条件に応じた団体戦記録検索
+|===
+
+=== RecordEditRequestRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findByRecordId
+|Long recordId, RecordType recordType
+|List<RecordEditRequestDto>
+|記録の編集申請一覧を取得
+
+|insertRequest
+|RecordEditRequestEntity
+|void
+|編集申請を登録
+
+|updateStatus
+|Long requestId, EditRequestStatus status, String comment
+|void
+|編集申請ステータスを更新
+
+|findPendingByRecordId
+|Long recordId, RecordType recordType
+|List<RecordEditRequestDto>
+|未処理の編集申請を取得
+|===
+
+== 共通定数
+
+=== RecordConstants
+
+|===
+|定数名 |値 |説明
+
+|MAX_TOURNAMENT_NAME_LENGTH
+|100
+|大会名の最大文字数
+
+|MAX_PLAYER_NAME_LENGTH
+|50
+|選手名の最大文字数
+
+|MAX_CLUB_NAME_LENGTH
+|50
+|クラブ名の最大文字数
+
+|MAX_ROUND_LENGTH
+|30
+|ラウンド名の最大文字数
+
+|MAX_SCORES_PER_PLAYER
+|2
+|1選手あたりの最大得点数
+
+|TEAM_MEMBERS_COUNT
+|5
+|団体戦の選手数
+
+|MAX_EDIT_REASON_LENGTH
+|500
+|編集申請理由の最大文字数
+
+|DEFAULT_PAGE_SIZE
+|20
+|デフォルトページサイズ
+
+|MAX_PAGE_SIZE
+|100
+|最大ページサイズ
+|===
+
+== 業務ルール
+
+=== スコア計算ルール
+
+* **取得本数としてカウントされるスコア**: メ、コ、ド、ツ、反、不（不戦勝=2本）
+* **▲（反則）**: 取得本数および引き分け判定には影響しない
+* **勝敗判定**: 2本先取で勝利、1本同士は引き分け
+* **反則処理**: 2つ目の反則で相手に反則1本が与えられる
+
+=== 公開範囲ルール
+
+* **PRIVATE**: 登録者のみ閲覧可能（デフォルト）
+* **CLUB**: 現在選択中のクラブメンバーのみ閲覧可能
+* **権限確認**: 記録の所有者またはクラブメンバーのみアクセス可能
+
+=== 編集・削除ルール
+
+* **権限制限**: 記録の登録者のみ編集・削除可能
+* **申請制**: クラブ公開された記録の編集・削除は申請制
+* **履歴保持**: 編集申請の履歴を全て記録・保持
+* **承認制**: クラブ管理者が編集申請を承認・拒否
+
+=== 検索・フィルタリングルール
+
+* **基本検索**: 大会名、選手名、クラブ名での部分一致検索
+* **日付範囲**: 試合日での範囲絞り込み
+* **公開設定**: 閲覧権限に応じたフィルタリング
+* **ページネーション**: 大量データに対する効率的な表示

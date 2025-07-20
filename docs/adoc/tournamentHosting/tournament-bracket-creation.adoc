@@ -1,0 +1,1192 @@
+= トーナメント表作成API 詳細設計書
+
+== 概要
+
+tournamentBracketCreationApi
+
+大会主催者が参加エントリーを基にトーナメント表を作成するAPI。
+シード設定、対戦組み合わせの自動生成・手動調整、トーナメント形式の選択等を行い、公開準備を整える。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[大会主催管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== TournamentBracketCreationRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|tournamentId
+|Long
+|@NotNull
+|大会ID
+
+|bracketType
+|BracketType
+|@NotNull
+|トーナメント種別
+
+|seedingMethod
+|SeedingMethod
+|@NotNull
+|シード方法
+
+|seedEntries
+|List<SeedEntryDto>
+|@Valid
+|シード設定エントリー一覧
+
+|manualPairings
+|List<ManualPairingDto>
+|@Valid
+|手動組み合わせ一覧
+
+|roundSettings
+|List<RoundSettingDto>
+|@Valid
+|ラウンド設定
+
+|bracketSettings
+|BracketSettingsDto
+|@Valid
+|トーナメント表設定
+
+|isPublic
+|Boolean
+|
+|公開フラグ（デフォルト：false）
+
+|scheduleSettings
+|BracketScheduleDto
+|@Valid
+|スケジュール設定
+|===
+
+==== TournamentBracketCreationResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|tournamentId
+|Long
+|大会ID
+
+|bracketId
+|Long
+|作成されたトーナメント表ID
+
+|bracketInfo
+|BracketInfoDto
+|トーナメント表基本情報
+
+|generatedMatches
+|List<GeneratedMatchDto>
+|生成された試合一覧
+
+|bracketStructure
+|BracketStructurePreviewDto
+|トーナメント構造プレビュー
+
+|validationResults
+|BracketValidationDto
+|検証結果
+
+|warnings
+|List<String>
+|警告メッセージ一覧
+
+|nextSteps
+|List<String>
+|次のステップ案内
+
+|canPublish
+|Boolean
+|公開可能フラグ
+
+|estimatedDuration
+|String
+|予想所要時間
+|===
+
+==== SeedEntryDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|entryId
+|Long
+|@NotNull
+|エントリーID
+
+|seedNumber
+|Integer
+|@Min(1)
+|シード番号
+
+|reason
+|String
+|@Size(max=200)
+|シード理由
+
+|isLocked
+|Boolean
+|
+|固定フラグ
+
+|priority
+|Integer
+|
+|優先度（同シード内での順序）
+|===
+
+==== ManualPairingDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|round
+|Integer
+|@Min(1)
+|ラウンド番号
+
+|matchNumber
+|Integer
+|@Min(1)
+|試合番号
+
+|redEntryId
+|Long
+|@NotNull
+|赤エントリーID
+
+|whiteEntryId
+|Long
+|@NotNull
+|白エントリーID
+
+|scheduledTime
+|LocalDateTime
+|
+|予定時刻
+
+|venue
+|String
+|@Size(max=100)
+|会場
+
+|reason
+|String
+|@Size(max=200)
+|手動設定理由
+|===
+
+==== RoundSettingDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|roundNumber
+|Integer
+|@Min(1)
+|ラウンド番号
+
+|roundName
+|String
+|@NotBlank, @Size(max=50)
+|ラウンド名
+
+|startTime
+|LocalDateTime
+|
+|開始予定時刻
+
+|endTime
+|LocalDateTime
+|
+|終了予定時刻
+
+|maxConcurrentMatches
+|Integer
+|@Min(1)
+|同時進行可能試合数
+
+|venue
+|String
+|@Size(max=100)
+|会場
+
+|isPublic
+|Boolean
+|
+|公開フラグ
+
+|special Settings
+|Map<String, Object>
+|
+|特別設定
+|===
+
+==== BracketSettingsDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|autoScheduling
+|Boolean
+|
+|自動スケジューリング
+
+|matchDuration
+|Integer
+|@Min(5), @Max(180)
+|試合時間（分）
+
+|breakDuration
+|Integer
+|@Min(0), @Max(60)
+|休憩時間（分）
+
+|simultaneousMatches
+|Integer
+|@Min(1), @Max(10)
+|同時進行試合数
+
+|courtCount
+|Integer
+|@Min(1), @Max(20)
+|コート数
+
+|allowByes
+|Boolean
+|
+|不戦勝許可
+
+|thirdPlaceMatch
+|Boolean
+|
+|3位決定戦実施
+
+|consolationBracket
+|Boolean
+|
+|敗者復活戦実施
+
+|customRules
+|String
+|@Size(max=1000)
+|カスタムルール
+|===
+
+==== GeneratedMatchDto
+
+|===
+|フィールド名 |型 |説明
+
+|matchId
+|Long
+|試合ID
+
+|bracketId
+|Long
+|ブラケットID
+
+|round
+|Integer
+|ラウンド番号
+
+|roundName
+|String
+|ラウンド名
+
+|matchNumber
+|Integer
+|試合番号
+
+|redEntry
+|BracketEntryDto
+|赤エントリー
+
+|whiteEntry
+|BracketEntryDto
+|白エントリー
+
+|scheduledTime
+|LocalDateTime
+|予定時刻
+
+|estimatedEndTime
+|LocalDateTime
+|予想終了時刻
+
+|venue
+|String
+|会場
+
+|courtNumber
+|Integer
+|コート番号
+
+|isBye
+|Boolean
+|不戦勝フラグ
+
+|dependsOn
+|List<Long>
+|依存する試合ID一覧
+
+|nextMatchId
+|Long
+|次の試合ID
+
+|position
+|PositionDto
+|表示位置
+|===
+
+==== BracketValidationDto
+
+|===
+|フィールド名 |型 |説明
+
+|isValid
+|Boolean
+|検証結果
+
+|errors
+|List<ValidationErrorDto>
+|エラー一覧
+
+|warnings
+|List<ValidationWarningDto>
+|警告一覧
+
+|suggestions
+|List<String>
+|改善提案一覧
+
+|entryCount
+|Integer
+|参加エントリー数
+
+|totalMatches
+|Integer
+|総試合数
+
+|estimatedDuration
+|String
+|予想所要時間
+
+|resourceRequirements
+|ResourceRequirementDto
+|必要リソース
+
+|conflicts
+|List<ConflictDto>
+|競合情報
+|===
+
+=== Enum定義
+
+==== BracketType
+
+|===
+|値 |説明
+
+|SINGLE_ELIMINATION
+|シングルエリミネーション（トーナメント）
+
+|DOUBLE_ELIMINATION
+|ダブルエリミネーション
+
+|ROUND_ROBIN
+|総当たり
+
+|SWISS_SYSTEM
+|スイス式
+
+|LEAGUE
+|リーグ戦
+
+|CUSTOM
+|カスタム形式
+|===
+
+==== SeedingMethod
+
+|===
+|値 |説明
+
+|NONE
+|シードなし（ランダム）
+
+|MANUAL
+|手動設定
+
+|RANKING_BASED
+|ランキング順
+
+|RANDOM_SEEDED
+|ランダムシード
+
+|GEOGRAPHIC
+|地域別配慮
+
+|BALANCED
+|戦力バランス考慮
+
+|CUSTOM
+|カスタム方式
+|===
+
+==== BracketGenerationStatus
+
+|===
+|値 |説明
+
+|DRAFT
+|下書き
+
+|VALIDATING
+|検証中
+
+|READY
+|公開準備完了
+
+|PUBLISHED
+|公開済み
+
+|LOCKED
+|確定・変更不可
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|tournamentIdがnullの場合
+|大会IDは必須です。
+|MSG_BRACKET_0001
+|400
+
+|2
+|指定された大会が見つからない場合
+|指定された大会が見つかりません。
+|MSG_BRACKET_0002
+|404
+
+|3
+|大会の編集権限がない場合
+|この大会を編集する権限がありません。
+|MSG_BRACKET_0003
+|403
+
+|4
+|エントリー受付が継続中の場合
+|エントリー受付中はトーナメント表を作成できません。
+|MSG_BRACKET_0004
+|400
+
+|5
+|参加エントリーが不足している場合
+|参加エントリーが不足しています（最低2エントリー必要）。
+|MSG_BRACKET_0005
+|400
+
+|6
+|シード設定に重複がある場合
+|シード番号に重複があります。
+|MSG_BRACKET_0006
+|400
+
+|7
+|手動組み合わせに矛盾がある場合
+|手動組み合わせに矛盾があります。
+|MSG_BRACKET_0007
+|400
+
+|8
+|スケジュール設定に問題がある場合
+|スケジュール設定に問題があります。
+|MSG_BRACKET_0008
+|400
+
+|9
+|既にトーナメント表が存在する場合
+|既にトーナメント表が作成されています。
+|MSG_BRACKET_0009
+|409
+
+|10
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TournamentBracketCreationController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentBracketCreationService
+|TournamentBracketCreationService
+|トーナメント表作成処理を行うサービス。`@RequiredArgsConstructor` によりインジェクション。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/tournaments/{tournamentId}/bracket"), @RequiredArgsConstructor
+
+|メソッド（トーナメント表作成）
+|@PostMapping
+
+|メソッド（プレビュー生成）
+|@PostMapping("/preview")
+
+|メソッド（手動調整）
+|@PutMapping("/{bracketId}/manual-adjust")
+
+|メソッド（公開）
+|@PutMapping("/{bracketId}/publish")
+
+|引数
+|@PathVariable, @RequestBody, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+* `createTournamentBracket` - トーナメント表作成
+* `generateBracketPreview` - プレビュー生成
+* `manualAdjustBracket` - 手動調整
+* `publishBracket` - 公開
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|createTournamentBracket
+|ResponseEntity<TournamentBracketCreationResponseDto>
+|作成されたトーナメント表情報を返却
+
+|generateBracketPreview
+|ResponseEntity<BracketPreviewDto>
+|プレビュー情報を返却
+
+|manualAdjustBracket
+|ResponseEntity<BracketAdjustmentResponseDto>
+|調整結果を返却
+
+|publishBracket
+|ResponseEntity<BracketPublishResponseDto>
+|公開結果を返却
+|===
+
+=== 処理詳細
+
+==== createTournamentBracket
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領・認証
+|パスパラメータから大会ID、リクエストボディからトーナメント表作成設定を取得。
+ユーザー認証情報を取得。
+
+|2
+|権限確認
+|tournamentPermissionService.validateEditPermission(tournamentId, userId) で編集権限を確認。
+
+|3
+|大会状態確認
+|tournamentStatusService.canCreateBracket(tournamentId) で作成可能状態かチェック。
+
+|4
+|サービス呼び出し
+|tournamentBracketCreationService.createBracket(requestDto, userId) を呼び出す。
+
+|5
+|レスポンス生成
+|作成結果を含む TournamentBracketCreationResponseDto を返却する。
+
+|–
+|エラー処理
+|* 大会が見つからない場合は MSG_BRACKET_0002 を返却  
+* 編集権限がない場合は MSG_BRACKET_0003 を返却  
+* エントリー受付中の場合は MSG_BRACKET_0004 を返却  
+* 既存のトーナメント表がある場合は MSG_BRACKET_0009 を返却
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TournamentBracketCreationService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|createBracket
+|TournamentBracketCreationRequestDto, Long userId
+|TournamentBracketCreationResponseDto
+|トーナメント表を作成し、検証結果と共に返却する
+
+|generatePreview
+|TournamentBracketCreationRequestDto, Long userId
+|BracketPreviewDto
+|プレビューを生成する
+
+|validateBracketSettings
+|TournamentBracketCreationRequestDto, Long tournamentId
+|BracketValidationDto
+|設定内容を検証する
+
+|generateMatches
+|Long tournamentId, BracketSettingsDto
+|List<GeneratedMatchDto>
+|試合組み合わせを生成する
+
+|calculateSchedule
+|List<GeneratedMatchDto>, BracketScheduleDto
+|List<GeneratedMatchDto>
+|スケジュールを計算する
+
+|applySeedSettings
+|List<EntryDto>, List<SeedEntryDto>
+|List<SeededEntryDto>
+|シード設定を適用する
+|===
+
+=== 実装クラス
+
+`TournamentBracketCreationServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentBracketRepository
+|TournamentBracketRepository
+|トーナメント表データ管理用リポジトリ
+
+|tournamentEntryRepository
+|TournamentEntryRepository
+|エントリー情報取得用リポジトリ
+
+|bracketGenerationService
+|BracketGenerationService
+|組み合わせ生成専用サービス
+
+|bracketValidationService
+|BracketValidationService
+|検証専用サービス
+
+|bracketSchedulingService
+|BracketSchedulingService
+|スケジューリング専用サービス
+
+|tournamentPermissionService
+|TournamentPermissionService
+|権限チェック用サービス
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== 処理詳細
+
+==== createBracket
+
+|===
+|順序 |概要 |詳細
+
+|1
+|大会・エントリー情報取得
+|* tournamentEntryRepository.findApprovedEntries(tournamentId) で承認済みエントリーを取得  
+* 参加エントリーが2未満の場合は `InsufficientEntriesException` をスロー → `MSG_BRACKET_0005`
+
+|2
+|設定検証
+|* validateBracketSettings(requestDto, tournamentId) で設定内容を検証  
+* 検証エラーがある場合は `BracketValidationException` をスロー
+
+|3
+|既存トーナメント表確認
+|* 既にトーナメント表が存在する場合は `BracketAlreadyExistsException` をスロー → `MSG_BRACKET_0009`
+
+|4
+|シード設定適用
+|* applySeedSettings(entries, requestDto.getSeedEntries()) でシードを適用  
+* シード重複チェック、ランキング情報の参照等を実行
+
+|5
+|組み合わせ生成
+|* bracketGenerationService.generateBracket() でトーナメント形式に応じた組み合わせを生成：  
+** SINGLE_ELIMINATION: シングルエリミネーション形式  
+** DOUBLE_ELIMINATION: ダブルエリミネーション形式  
+** ROUND_ROBIN: 総当たり形式  
+** SWISS_SYSTEM: スイス式  
+** CUSTOM: カスタム形式
+
+|6
+|手動調整適用
+|* requestDto.getManualPairings() の手動組み合わせを適用  
+* 矛盾チェックと整合性確認を実行
+
+|7
+|スケジュール計算
+|* bracketSchedulingService.calculateSchedule() で試合スケジュールを計算：  
+** 開始時刻、終了時刻の算出  
+** コート割り当て  
+** 同時進行可能試合数の考慮
+
+|8
+|最終検証
+|* 生成されたトーナメント表の最終検証を実行  
+* リソース要件、時間制約等をチェック
+
+|9
+|データ保存
+|* tournamentBracketRepository.saveBracket() でトーナメント表を保存  
+* 各試合情報、スケジュール情報を一括保存
+
+|10
+|通知・ログ
+|* 参加クラブへの通知準備  
+* 作成ログの記録
+
+|11
+|レスポンス生成
+|TournamentBracketCreationResponseDto に以下の情報を設定して返却：  
+* tournamentId, bracketId: 基本情報  
+* bracketInfo: トーナメント表基本情報  
+* generatedMatches: 生成された試合一覧  
+* bracketStructure: 構造プレビュー  
+* validationResults: 検証結果  
+* warnings: 警告メッセージ  
+* nextSteps: 次のステップ案内  
+* canPublish: 公開可能フラグ
+
+|–
+|エラー処理
+|* 各種例外をスローし、適切なエラーメッセージを返す  
+* トランザクション失敗時はロールバック実行
+|===
+
+== BracketGenerationService定義
+
+トーナメント組み合わせ生成を行う専用サービス
+
+=== メソッド定義
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|generateSingleElimination
+|List<SeededEntryDto>, BracketSettingsDto
+|List<BracketMatchDto>
+|シングルエリミネーション形式を生成
+
+|generateDoubleElimination
+|List<SeededEntryDto>, BracketSettingsDto
+|List<BracketMatchDto>
+|ダブルエリミネーション形式を生成
+
+|generateRoundRobin
+|List<SeededEntryDto>, BracketSettingsDto
+|List<BracketMatchDto>
+|総当たり形式を生成
+
+|generateSwissSystem
+|List<SeededEntryDto>, BracketSettingsDto
+|List<BracketMatchDto>
+|スイス式を生成
+
+|applySeedRules
+|List<EntryDto>, SeedingMethod
+|List<SeededEntryDto>
+|シードルールを適用
+
+|calculateBracketSize
+|Integer entryCount, BracketType
+|Integer
+|必要なブラケットサイズを計算
+
+|optimizePairings
+|List<BracketMatchDto>, String criteria
+|List<BracketMatchDto>
+|組み合わせを最適化
+|===
+
+=== 処理アルゴリズム
+
+==== シングルエリミネーション生成
+
+```java
+public List<BracketMatchDto> generateSingleElimination(List<SeededEntryDto> entries, BracketSettingsDto settings) {
+    // 1. エントリー数から必要なブラケットサイズを計算
+    int bracketSize = calculateBracketSize(entries.size(), BracketType.SINGLE_ELIMINATION);
+    
+    // 2. 不戦勝（Bye）の配置を決定
+    int byeCount = bracketSize - entries.size();
+    List<SeededEntryDto> adjustedEntries = applyByes(entries, byeCount);
+    
+    // 3. シード順に応じた初期配置
+    List<SeededEntryDto> orderedEntries = applySeedOrder(adjustedEntries, settings.getSeedingMethod());
+    
+    // 4. 各ラウンドの試合を生成
+    List<BracketMatchDto> matches = new ArrayList<>();
+    int currentRound = 1;
+    int matchNumber = 1;
+    
+    // 1回戦の生成
+    for (int i = 0; i < orderedEntries.size(); i += 2) {
+        BracketMatchDto match = createMatch(
+            currentRound, 
+            matchNumber++, 
+            orderedEntries.get(i), 
+            orderedEntries.get(i + 1)
+        );
+        matches.add(match);
+    }
+    
+    // 2回戦以降の生成（勝者が次ラウンドに進出）
+    while (matches.size() < bracketSize - 1) {
+        matches.addAll(generateNextRound(matches, currentRound++));
+    }
+    
+    return matches;
+}
+```
+
+== Repository定義
+
+=== 使用メソッド
+
+==== TournamentBracketRepository（拡張）
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|saveBracket
+|TournamentBracketEntity
+|TournamentBracketEntity
+|トーナメント表を保存
+
+|saveMatches
+|List<BracketMatchEntity>
+|List<BracketMatchEntity>
+|試合一覧を一括保存
+
+|findExistingBracket
+|Long tournamentId
+|Optional<TournamentBracketEntity>
+|既存のトーナメント表を確認
+
+|updateBracketStatus
+|Long bracketId, BracketGenerationStatus status
+|void
+|ステータスを更新
+
+|deleteBracket
+|Long bracketId
+|void
+|トーナメント表を削除
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 承認済みエントリー取得
+
+[source,sql]
+----
+SELECT 
+    te.id as entry_id,
+    te.team_name,
+    te.club_id,
+    c.name as club_name,
+    te.seed,
+    te.applied_at,
+    te.player_count,
+    -- ランキング情報（シード用）
+    COALESCE(cr.ranking_points, 0) as ranking_points,
+    cr.ranking_position,
+    -- 過去の実績
+    COALESCE(cs.tournament_wins, 0) as tournament_wins,
+    COALESCE(cs.total_matches, 0) as total_matches
+FROM tournament_team_entries te
+JOIN clubs c ON te.club_id = c.id
+LEFT JOIN club_rankings cr ON te.club_id = cr.club_id
+LEFT JOIN club_statistics cs ON te.club_id = cs.club_id
+WHERE te.tournament_id = #{tournamentId}
+  AND te.status = 'APPROVED'
+ORDER BY 
+    CASE WHEN te.seed IS NOT NULL THEN te.seed ELSE 999 END,
+    cr.ranking_points DESC,
+    te.applied_at ASC
+----
+
+==== トーナメント表保存
+
+[source,sql]
+----
+INSERT INTO tournament_brackets (
+    tournament_id,
+    bracket_type,
+    seeding_method,
+    total_rounds,
+    total_matches,
+    participant_count,
+    settings,
+    status,
+    created_by,
+    created_at
+) VALUES (
+    #{tournamentId},
+    #{bracketType},
+    #{seedingMethod},
+    #{totalRounds},
+    #{totalMatches},
+    #{participantCount},
+    #{settings},
+    #{status},
+    #{createdBy},
+    NOW()
+)
+----
+
+==== 試合一覧保存
+
+[source,sql]
+----
+INSERT INTO bracket_matches (
+    bracket_id,
+    round,
+    round_name,
+    match_number,
+    position,
+    red_entry_id,
+    white_entry_id,
+    scheduled_at,
+    venue,
+    court_number,
+    is_bye,
+    depends_on,
+    next_match_id,
+    created_at
+) VALUES
+<foreach collection="matches" item="match" separator=",">
+(
+    #{match.bracketId},
+    #{match.round},
+    #{match.roundName},
+    #{match.matchNumber},
+    #{match.position},
+    #{match.redEntryId},
+    #{match.whiteEntryId},
+    #{match.scheduledAt},
+    #{match.venue},
+    #{match.courtNumber},
+    #{match.isBye},
+    #{match.dependsOn},
+    #{match.nextMatchId},
+    NOW()
+)
+</foreach>
+----
+
+== 業務ルール
+
+=== トーナメント表作成ルール
+
+1. **エントリー確定後**: エントリー受付締切後のみ作成可能
+2. **最小参加数**: 最低2エントリー必要
+3. **シード設定**: 同一シード番号の重複禁止
+4. **手動調整**: 自動生成後の手動調整可能
+5. **一意性**: 1大会につき1つのトーナメント表のみ
+
+=== シード設定ルール
+
+* **上位シード**: 準決勝まで対戦しないよう配置
+* **地域考慮**: 同地域チーム同士は初期で対戦回避
+* **実績考慮**: 過去の実績を参考にしたシード提案
+* **手動優先**: 手動設定は自動設定より優先
+
+=== スケジュール設定ルール
+
+* **時間間隔**: 試合間に適切な休憩時間を確保
+* **コート配分**: 利用可能コート数に応じた同時進行
+* **依存関係**: 前試合の結果が確定してから次試合開始
+* **調整可能**: 作成後も手動でスケジュール調整可能
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== トーナメント表作成リクエスト
+
+```
+POST /api/tournaments/123/bracket
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "tournamentId": 123,
+    "bracketType": "SINGLE_ELIMINATION",
+    "seedingMethod": "RANKING_BASED",
+    "seedEntries": [
+        {
+            "entryId": 456,
+            "seedNumber": 1,
+            "reason": "前回優勝チーム",
+            "isLocked": true
+        },
+        {
+            "entryId": 789,
+            "seedNumber": 2,
+            "reason": "ランキング2位",
+            "isLocked": false
+        }
+    ],
+    "bracketSettings": {
+        "autoScheduling": true,
+        "matchDuration": 45,
+        "breakDuration": 15,
+        "simultaneousMatches": 2,
+        "courtCount": 4,
+        "allowByes": true,
+        "thirdPlaceMatch": false
+    },
+    "scheduleSettings": {
+        "startTime": "2024-03-15T09:00:00",
+        "endTime": "2024-03-15T17:00:00",
+        "lunchBreakStart": "2024-03-15T12:00:00",
+        "lunchBreakEnd": "2024-03-15T13:00:00"
+    },
+    "isPublic": false
+}
+```
+
+==== トーナメント表作成レスポンス
+
+```json
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{
+    "tournamentId": 123,
+    "bracketId": 789,
+    "bracketInfo": {
+        "bracketType": "SINGLE_ELIMINATION",
+        "totalRounds": 4,
+        "totalMatches": 15,
+        "participantCount": 16,
+        "seedingMethod": "RANKING_BASED"
+    },
+    "generatedMatches": [
+        {
+            "matchId": 1001,
+            "bracketId": 789,
+            "round": 1,
+            "roundName": "1回戦",
+            "matchNumber": 1,
+            "redEntry": {
+                "entryId": 456,
+                "name": "東京剣道クラブA",
+                "clubName": "東京剣道クラブ",
+                "seed": 1
+            },
+            "whiteEntry": {
+                "entryId": 457,
+                "name": "大阪剣道クラブD",
+                "clubName": "大阪剣道クラブ",
+                "seed": 16
+            },
+            "scheduledTime": "2024-03-15T09:00:00",
+            "estimatedEndTime": "2024-03-15T09:45:00",
+            "venue": "メインアリーナ",
+            "courtNumber": 1,
+            "isBye": false,
+            "nextMatchId": 1009
+        }
+    ],
+    "bracketStructure": {
+        "layout": "SINGLE_ELIMINATION",
+        "rounds": [
+            {
+                "roundNumber": 1,
+                "roundName": "1回戦",
+                "matchCount": 8,
+                "startTime": "2024-03-15T09:00:00",
+                "endTime": "2024-03-15T11:00:00"
+            }
+        ]
+    },
+    "validationResults": {
+        "isValid": true,
+        "errors": [],
+        "warnings": [
+            "コート2が昼休み時間と重複しています"
+        ],
+        "suggestions": [
+            "3位決定戦を追加することをお勧めします"
+        ],
+        "entryCount": 16,
+        "totalMatches": 15,
+        "estimatedDuration": "8時間",
+        "resourceRequirements": {
+            "minCourts": 2,
+            "minReferees": 4,
+            "minDuration": "7時間"
+        }
+    },
+    "warnings": [
+        "一部の試合で時間が重複する可能性があります"
+    ],
+    "nextSteps": [
+        "スケジュールを確認してください",
+        "必要に応じて手動調整を行ってください",
+        "準備ができたら公開してください"
+    ],
+    "canPublish": true,
+    "estimatedDuration": "8時間"
+}
+```
+
+==== プレビュー生成リクエスト
+
+```
+POST /api/tournaments/123/bracket/preview
+Authorization: Bearer {jwt-token}
+```
+
+==== 手動調整リクエスト
+
+```
+PUT /api/tournaments/123/bracket/789/manual-adjust
+Authorization: Bearer {jwt-token}
+```

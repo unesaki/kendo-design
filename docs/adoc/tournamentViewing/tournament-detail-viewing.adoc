@@ -1,0 +1,1101 @@
+= 大会詳細閲覧API 詳細設計書
+
+== 概要
+
+tournamentDetailViewingApi
+
+指定された大会の詳細情報を閲覧するAPI。
+大会の基本情報、参加者一覧、スケジュール、統計情報等を提供し、ユーザーの権限に応じて表示内容を制御する。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[大会閲覧機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== TournamentDetailRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|tournamentId
+|Long
+|@NotNull
+|大会ID
+
+|includeParticipants
+|Boolean
+|
+|参加者一覧を含む（デフォルト：true）
+
+|includeSchedule
+|Boolean
+|
+|スケジュールを含む（デフォルト：true）
+
+|includeStatistics
+|Boolean
+|
+|統計情報を含む（デフォルト：true）
+
+|participantPage
+|Integer
+|@Min(0)
+|参加者一覧のページ番号（デフォルト：0）
+
+|participantSize
+|Integer
+|@Min(1), @Max(50)
+|参加者一覧のページサイズ（デフォルト：20）
+|===
+
+==== TournamentDetailResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|tournament
+|TournamentDetailDto
+|大会詳細情報
+
+|participants
+|Page<ParticipantDto>
+|参加者一覧（権限がある場合のみ）
+
+|schedule
+|List<ScheduleDto>
+|スケジュール一覧
+
+|statistics
+|TournamentStatisticsDto
+|統計情報
+
+|relatedTournaments
+|List<TournamentListDto>
+|関連大会一覧（同じ主催クラブ等）
+
+|accessPermissions
+|TournamentAccessPermissionsDto
+|アクセス権限情報
+
+|viewHistory
+|TournamentViewHistoryDto
+|閲覧履歴情報（ログイン時のみ）
+|===
+
+==== ParticipantDto
+
+|===
+|フィールド名 |型 |説明
+
+|entryId
+|Long
+|エントリーID
+
+|entryName
+|String
+|エントリー名（チーム名/選手名）
+
+|clubId
+|Long
+|所属クラブID
+
+|clubName
+|String
+|所属クラブ名
+
+|entryType
+|EntryType
+|エントリー種別（TEAM/INDIVIDUAL）
+
+|status
+|EntryStatus
+|エントリーステータス
+
+|seed
+|Integer
+|シード番号
+
+|registeredAt
+|LocalDateTime
+|登録日時
+
+|playerCount
+|Integer
+|選手数（団体戦の場合）
+
+|representative
+|String
+|代表者名
+
+|contactInfo
+|String
+|連絡先（権限がある場合のみ）
+
+|canView
+|Boolean
+|詳細閲覧可能フラグ
+
+|results
+|ParticipantResultSummaryDto
+|成績サマリー（大会終了後）
+|===
+
+==== ScheduleDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|スケジュールID
+
+|eventName
+|String
+|イベント名
+
+|description
+|String
+|説明
+
+|startTime
+|LocalDateTime
+|開始時刻
+
+|endTime
+|LocalDateTime
+|終了時刻
+
+|venue
+|String
+|会場
+
+|eventType
+|ScheduleEventType
+|イベント種別
+
+|isPublic
+|Boolean
+|公開フラグ
+
+|status
+|ScheduleStatus
+|ステータス
+
+|relatedMatches
+|List<String>
+|関連試合一覧
+|===
+
+==== TournamentStatisticsDto
+
+|===
+|フィールド名 |型 |説明
+
+|totalEntries
+|Integer
+|総エントリー数
+
+|totalClubs
+|Integer
+|参加クラブ数
+
+|totalPlayers
+|Integer
+|総選手数
+
+|entryDistribution
+|Map<String, Integer>
+|エントリー分布（クラブ別）
+
+|geographicDistribution
+|Map<String, Integer>
+|地域分布
+
+|ageDistribution
+|Map<String, Integer>
+|年代分布（将来拡張）
+
+|genderDistribution
+|Map<String, Integer>
+|性別分布（将来拡張）
+
+|registrationTimeline
+|List<RegistrationTimelineDto>
+|登録推移
+
+|progressStats
+|ProgressStatisticsDto
+|進行状況統計
+
+|competitionLevel
+|String
+|競技レベル評価
+
+|viewStats
+|ViewStatisticsDto
+|閲覧統計
+|===
+
+==== TournamentAccessPermissionsDto
+
+|===
+|フィールド名 |型 |説明
+
+|canViewBasicInfo
+|Boolean
+|基本情報閲覧可能
+
+|canViewParticipants
+|Boolean
+|参加者一覧閲覧可能
+
+|canViewContactInfo
+|Boolean
+|連絡先情報閲覧可能
+
+|canViewBracket
+|Boolean
+|トーナメント表閲覧可能
+
+|canViewResults
+|Boolean
+|試合結果閲覧可能
+
+|canViewStatistics
+|Boolean
+|統計情報閲覧可能
+
+|canExportData
+|Boolean
+|データエクスポート可能
+
+|accessLevel
+|String
+|アクセスレベル（PUBLIC/MEMBER/ADMIN）
+
+|restrictions
+|List<String>
+|制限事項一覧
+|===
+
+==== HostClubDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|クラブID
+
+|name
+|String
+|クラブ名
+
+|description
+|String
+|クラブ説明
+
+|foundedYear
+|Integer
+|設立年
+
+|location
+|String
+|所在地
+
+|memberCount
+|Integer
+|メンバー数
+
+|contactEmail
+|String
+|連絡先メール
+
+|website
+|String
+|ウェブサイト
+
+|socialMedia
+|Map<String, String>
+|SNSアカウント
+
+|hostingHistory
+|HostingHistoryDto
+|主催履歴
+
+|reputation
+|ClubReputationDto
+|評価情報
+|===
+
+=== Enum定義
+
+==== ScheduleEventType
+
+|===
+|値 |表示名 |説明
+
+|REGISTRATION
+|受付
+|参加者受付
+
+|OPENING_CEREMONY
+|開会式
+|開会式
+
+|MATCH
+|試合
+|試合・対戦
+
+|BREAK
+|休憩
+|休憩時間
+
+|LUNCH
+|昼食
+|昼食休憩
+
+|CLOSING_CEREMONY
+|閉会式
+|閉会式
+
+|AWARD_CEREMONY
+|表彰式
+|表彰式
+
+|OTHER
+|その他
+|その他のイベント
+|===
+
+==== ScheduleStatus
+
+|===
+|値 |表示名 |説明
+
+|SCHEDULED
+|予定
+|予定
+
+|IN_PROGRESS
+|進行中
+|進行中
+
+|COMPLETED
+|完了
+|完了
+
+|CANCELLED
+|中止
+|中止
+
+|DELAYED
+|遅延
+|遅延
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|tournamentIdがnullの場合
+|大会IDは必須です。
+|MSG_VIEW_0012
+|400
+
+|2
+|participantPageが負の値の場合
+|ページ番号は0以上で指定してください。
+|MSG_VIEW_0003
+|400
+
+|3
+|participantSizeが1未満または50を超える場合
+|ページサイズは1から50の間で指定してください。
+|MSG_VIEW_0013
+|400
+
+|4
+|指定された大会が見つからない場合
+|指定された大会が見つかりません。
+|MSG_VIEW_0005
+|404
+
+|5
+|大会の閲覧権限がない場合
+|この大会を閲覧する権限がありません。
+|MSG_VIEW_0006
+|403
+
+|6
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TournamentViewController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentViewService
+|TournamentViewService
+|大会閲覧処理を行うサービス。`@RequiredArgsConstructor` によりインジェクション。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/tournaments"), @RequiredArgsConstructor
+
+|メソッド（大会詳細取得）
+|@GetMapping("/{tournamentId}")
+
+|メソッド（参加者一覧取得）
+|@GetMapping("/{tournamentId}/participants")
+
+|メソッド（大会統計取得）
+|@GetMapping("/{tournamentId}/statistics")
+
+|引数
+|@PathVariable, @RequestParam, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+* `getTournamentDetail` - 大会詳細取得
+* `getParticipants` - 参加者一覧取得
+* `getTournamentStatistics` - 大会統計取得
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|getTournamentDetail
+|ResponseEntity<TournamentDetailResponseDto>
+|大会詳細情報を返却
+
+|getParticipants
+|ResponseEntity<Page<ParticipantDto>>
+|参加者一覧をページネーションで返却
+
+|getTournamentStatistics
+|ResponseEntity<TournamentStatisticsDto>
+|大会統計情報を返却
+|===
+
+=== 処理詳細
+
+==== getTournamentDetail
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|パスパラメータから大会ID、クエリパラメータから詳細オプションを取得。
+
+|2
+|ユーザー情報取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーIDを取得する（任意）。
+
+|3
+|サービス呼び出し
+|tournamentViewService.getTournamentDetail(tournamentId, requestDto, userId) を呼び出す。
+
+|4
+|閲覧履歴記録
+|ログイン済みユーザーの場合、閲覧履歴を記録。
+
+|5
+|レスポンス生成
+|大会詳細情報を含む TournamentDetailResponseDto を返却する。
+
+|–
+|エラー処理
+|* 大会が見つからない場合は MSG_VIEW_0005 を返却  
+* 閲覧権限がない場合は MSG_VIEW_0006 を返却  
+* バリデーションエラー時は適切なメッセージIDを返却
+|===
+
+==== getParticipants
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|パスパラメータから大会ID、クエリパラメータからページング情報を取得。
+
+|2
+|権限確認
+|tournamentViewPermissionService.canViewParticipants() で参加者閲覧権限を確認。
+
+|3
+|サービス呼び出し
+|tournamentViewService.getParticipants(tournamentId, pageable, userId) を呼び出す。
+
+|4
+|レスポンス生成
+|参加者一覧をページネーション形式で返却する。
+|===
+
+==== getTournamentStatistics
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|パスパラメータから大会IDを取得。
+
+|2
+|権限確認
+|tournamentViewPermissionService.canViewStatistics() で統計閲覧権限を確認。
+
+|3
+|サービス呼び出し
+|tournamentViewService.getTournamentStatistics(tournamentId, userId) を呼び出す。
+
+|4
+|レスポンス生成
+|統計情報を返却する。
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TournamentViewService`（拡張）
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|getTournamentDetail
+|Long tournamentId, TournamentDetailRequestDto, Long userId
+|TournamentDetailResponseDto
+|大会詳細情報を取得し、権限に応じた情報を返却する
+
+|getParticipants
+|Long tournamentId, Pageable pageable, Long userId
+|Page<ParticipantDto>
+|参加者一覧を取得する
+
+|getTournamentStatistics
+|Long tournamentId, Long userId
+|TournamentStatisticsDto
+|大会統計情報を計算・取得する
+
+|getRelatedTournaments
+|Long tournamentId, Long userId, Integer limit
+|List<TournamentListDto>
+|関連大会一覧を取得する
+
+|recordViewHistory
+|Long tournamentId, Long userId
+|void
+|閲覧履歴を記録する
+|===
+
+=== 実装クラス
+
+`TournamentViewServiceImpl`（拡張）
+
+=== 処理詳細
+
+==== getTournamentDetail
+
+|===
+|順序 |概要 |詳細
+
+|1
+|大会情報取得・権限確認
+|* tournamentViewRepository.findTournamentDetails(tournamentId, userId) で大会詳細を取得  
+* 大会が見つからない場合は `TournamentNotFoundException` をスロー → `MSG_VIEW_0005`  
+* tournamentViewPermissionService.validateTournamentAccess(tournamentId, userId) で閲覧権限を確認  
+* 権限がない場合は `AccessDeniedException` をスロー → `MSG_VIEW_0006`
+
+|2
+|アクセス権限情報生成
+|* 各種情報への詳細なアクセス権限を判定：  
+** canViewParticipants: 参加者一覧閲覧権限  
+** canViewContactInfo: 連絡先情報閲覧権限  
+** canViewBracket: トーナメント表閲覧権限  
+** canViewResults: 試合結果閲覧権限  
+** canViewStatistics: 統計情報閲覧権限
+
+|3
+|参加者情報取得
+|* includeParticipants が true かつ権限がある場合：  
+** getParticipants(tournamentId, PageRequest.of(participantPage, participantSize), userId) を呼び出し  
+** 権限に応じて連絡先情報の表示制御
+
+|4
+|スケジュール情報取得
+|* includeSchedule が true の場合：  
+** 公開されているスケジュール情報を取得  
+** イベント種別ごとに分類・整理
+
+|5
+|統計情報取得
+|* includeStatistics が true かつ権限がある場合：  
+** getTournamentStatistics(tournamentId, userId) を呼び出し  
+** 権限レベルに応じて統計詳細度を調整
+
+|6
+|関連大会取得
+|* getRelatedTournaments(tournamentId, userId, 5) で関連大会を取得：  
+** 同じ主催クラブの大会  
+** 同じ時期の大会  
+** 同じ種別の大会
+
+|7
+|主催クラブ詳細情報取得
+|* 主催クラブの詳細情報を取得・整理  
+* 主催履歴や評価情報を付加
+
+|8
+|閲覧履歴記録
+|* recordViewHistory(tournamentId, userId) で閲覧履歴を記録  
+* アクセス統計の更新
+
+|9
+|レスポンス生成
+|TournamentDetailResponseDto に以下の情報を設定して返却：  
+* tournament: 大会詳細情報  
+* participants: 参加者一覧（権限がある場合のみ）  
+* schedule: スケジュール一覧  
+* statistics: 統計情報（権限がある場合のみ）  
+* relatedTournaments: 関連大会一覧  
+* accessPermissions: アクセス権限情報  
+* viewHistory: 閲覧履歴情報（ログイン時のみ）
+
+|–
+|エラー処理
+|* 各種例外をスローし、エラーメッセージを返す  
+* 部分的な情報取得エラーは警告ログ出力後、利用可能な情報のみで継続
+|===
+
+==== getParticipants
+
+|===
+|順序 |概要 |詳細
+
+|1
+|権限確認
+|* tournamentViewPermissionService.canViewParticipants(tournamentId, userId) で権限確認
+
+|2
+|参加者一覧取得
+|* 承認済みエントリーを取得  
+* エントリーステータス、シード番号等を含む詳細情報を取得
+
+|3
+|権限別情報フィルタリング
+|* 一般ユーザー: 基本情報のみ  
+* クラブメンバー: 所属クラブの詳細情報  
+* 主催者: 全詳細情報（連絡先含む）
+
+|4
+|成績情報付加
+|* 大会完了後の場合、各参加者の成績サマリーを付加
+
+|5
+|レスポンス生成
+|権限に応じた参加者情報をページネーション形式で返却
+|===
+
+==== getTournamentStatistics
+
+|===
+|順序 |概要 |詳細
+
+|1
+|基本統計計算
+|* 総エントリー数、参加クラブ数、総選手数を計算
+
+|2
+|分布統計計算
+|* エントリー分布（クラブ別）  
+* 地域分布（都道府県別）  
+* 登録推移（日別）
+
+|3
+|進行状況統計
+|* 試合完了率、ラウンド進行状況  
+* 結果公開状況
+
+|4
+|競技レベル評価
+|* 参加クラブの実績、選手レベル等から競技レベルを評価
+
+|5
+|閲覧統計
+|* アクセス数、閲覧ユーザー数等の統計情報
+
+|6
+|レスポンス生成
+|権限に応じた統計情報を返却
+|===
+
+== Repository定義
+
+=== 拡張メソッド
+
+==== TournamentViewRepository（追加）
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findTournamentDetailsWithPermissions
+|Long tournamentId, Long userId
+|Optional<TournamentDetailDto>
+|権限情報を含む大会詳細を取得
+
+|findParticipantsByTournamentId
+|Long tournamentId, Long userId, Pageable
+|Page<ParticipantDto>
+|参加者一覧を権限フィルタリングして取得
+
+|findScheduleByTournamentId
+|Long tournamentId
+|List<ScheduleDto>
+|公開スケジュール一覧を取得
+
+|findRelatedTournaments
+|Long tournamentId, String criteria, Integer limit
+|List<TournamentListDto>
+|関連大会を取得
+
+|recordTournamentView
+|Long tournamentId, Long userId, LocalDateTime viewedAt
+|void
+|閲覧履歴を記録
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 大会詳細取得
+
+[source,sql]
+----
+SELECT 
+    t.id,
+    t.name,
+    t.description,
+    t.event_date,
+    t.entry_deadline,
+    t.tournament_type,
+    t.match_format,
+    t.status,
+    t.visibility,
+    t.venue,
+    t.contact_info,
+    t.max_participants,
+    t.is_bracket_public,
+    t.is_result_public,
+    c.id as host_club_id,
+    c.name as host_club_name,
+    c.description as host_club_description,
+    c.founded_year,
+    c.location,
+    c.contact_email,
+    c.website,
+    COUNT(DISTINCT te.id) as current_participants,
+    COUNT(DISTINCT te.club_id) as participating_clubs,
+    CASE 
+        WHEN t.visibility = 'PUBLIC' THEN true
+        WHEN t.visibility = 'CLUB_ONLY' AND #{userId} IS NOT NULL 
+         AND EXISTS (
+            SELECT 1 FROM club_members cm 
+            WHERE cm.club_id = t.host_club_id AND cm.user_id = #{userId}
+         ) THEN true
+        ELSE false
+    END as can_view_basic,
+    CASE 
+        WHEN t.visibility = 'PUBLIC' OR 
+             (#{userId} IS NOT NULL AND EXISTS (
+                SELECT 1 FROM club_members cm 
+                WHERE cm.club_id = t.host_club_id AND cm.user_id = #{userId}
+                  AND cm.role IN ('ADMIN', 'MODERATOR')
+             )) THEN true
+        ELSE false
+    END as can_view_contact_info
+FROM tournaments t
+JOIN clubs c ON t.host_club_id = c.id
+LEFT JOIN tournament_team_entries te ON t.id = te.tournament_id AND te.status = 'APPROVED'
+WHERE t.id = #{tournamentId}
+  AND t.is_public = true
+GROUP BY t.id, c.id
+----
+
+==== 参加者一覧取得
+
+[source,sql]
+----
+SELECT 
+    te.id as entry_id,
+    CASE 
+        WHEN t.tournament_type = 'TEAM' THEN te.team_name
+        ELSE CONCAT(p.first_name, ' ', p.last_name)
+    END as entry_name,
+    te.club_id,
+    c.name as club_name,
+    te.status,
+    te.seed,
+    te.applied_at as registered_at,
+    CASE WHEN t.tournament_type = 'TEAM' THEN 
+        (SELECT COUNT(*) FROM tournament_team_rosters ttr WHERE ttr.team_entry_id = te.id)
+        ELSE 1
+    END as player_count,
+    CASE 
+        WHEN #{userId} IS NOT NULL AND (
+            EXISTS (SELECT 1 FROM club_members cm WHERE cm.club_id = t.host_club_id AND cm.user_id = #{userId}) OR
+            EXISTS (SELECT 1 FROM club_members cm WHERE cm.club_id = te.club_id AND cm.user_id = #{userId})
+        ) THEN u.email
+        ELSE NULL
+    END as contact_info,
+    -- 大会完了後の成績情報
+    CASE WHEN t.status = 'COMPLETED' THEN
+        COALESCE((
+            SELECT JSON_OBJECT(
+                'wins', SUM(CASE WHEN mr.winner = 'red' AND b.red_entry_id = te.id THEN 1
+                                 WHEN mr.winner = 'white' AND b.white_entry_id = te.id THEN 1 ELSE 0 END),
+                'losses', SUM(CASE WHEN mr.winner = 'red' AND b.white_entry_id = te.id THEN 1
+                                   WHEN mr.winner = 'white' AND b.red_entry_id = te.id THEN 1 ELSE 0 END),
+                'draws', SUM(CASE WHEN mr.winner = 'draw' AND (b.red_entry_id = te.id OR b.white_entry_id = te.id) THEN 1 ELSE 0 END)
+            )
+            FROM tournament_brackets b
+            JOIN match_results mr ON b.id = mr.bracket_id
+            WHERE b.tournament_id = t.id 
+              AND (b.red_entry_id = te.id OR b.white_entry_id = te.id)
+        ), '{}')
+        ELSE NULL
+    END as results_summary
+FROM tournament_team_entries te
+JOIN tournaments t ON te.tournament_id = t.id
+JOIN clubs c ON te.club_id = c.id
+LEFT JOIN users u ON te.created_by = u.id
+LEFT JOIN personal_matches p ON te.player_id = p.id  -- 個人戦の場合
+WHERE te.tournament_id = #{tournamentId}
+  AND te.status = 'APPROVED'
+ORDER BY 
+    CASE WHEN te.seed IS NOT NULL THEN te.seed ELSE 999 END,
+    te.applied_at ASC
+LIMIT #{limit} OFFSET #{offset}
+----
+
+==== 統計情報計算
+
+[source,sql]
+----
+-- 基本統計
+SELECT 
+    COUNT(DISTINCT te.id) as total_entries,
+    COUNT(DISTINCT te.club_id) as total_clubs,
+    SUM(CASE WHEN t.tournament_type = 'TEAM' THEN 
+        (SELECT COUNT(*) FROM tournament_team_rosters ttr WHERE ttr.team_entry_id = te.id)
+        ELSE 1
+    END) as total_players,
+    AVG(CASE WHEN t.tournament_type = 'TEAM' THEN 
+        (SELECT COUNT(*) FROM tournament_team_rosters ttr WHERE ttr.team_entry_id = te.id)
+        ELSE 1
+    END) as avg_team_size
+FROM tournament_team_entries te
+JOIN tournaments t ON te.tournament_id = t.id
+WHERE te.tournament_id = #{tournamentId}
+  AND te.status = 'APPROVED';
+
+-- エントリー分布（クラブ別）
+SELECT 
+    c.name as club_name,
+    c.location,
+    COUNT(*) as entry_count
+FROM tournament_team_entries te
+JOIN clubs c ON te.club_id = c.id
+WHERE te.tournament_id = #{tournamentId}
+  AND te.status = 'APPROVED'
+GROUP BY c.id, c.name, c.location
+ORDER BY entry_count DESC;
+
+-- 登録推移
+SELECT 
+    DATE(te.applied_at) as registration_date,
+    COUNT(*) as daily_registrations,
+    SUM(COUNT(*)) OVER (ORDER BY DATE(te.applied_at)) as cumulative_registrations
+FROM tournament_team_entries te
+WHERE te.tournament_id = #{tournamentId}
+  AND te.status = 'APPROVED'
+GROUP BY DATE(te.applied_at)
+ORDER BY registration_date;
+----
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== 大会詳細取得リクエスト
+
+```
+GET /api/tournaments/123?includeParticipants=true&includeSchedule=true&includeStatistics=true&participantPage=0&participantSize=20
+Authorization: Bearer {jwt-token}
+```
+
+==== 大会詳細取得レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "tournament": {
+        "id": 123,
+        "name": "第30回 全日本剣道選手権大会",
+        "hostClub": {
+            "id": 1,
+            "name": "東京剣道連盟",
+            "description": "1950年設立の歴史ある剣道連盟",
+            "location": "東京都渋谷区",
+            "memberCount": 250,
+            "hostingHistory": {
+                "totalTournaments": 45,
+                "averageParticipants": 28.5,
+                "reputation": 4.8
+            }
+        },
+        "eventDate": "2024-03-15",
+        "entryDeadline": "2024-03-08",
+        "tournamentType": "TEAM",
+        "matchFormat": "TOURNAMENT",
+        "status": "ENTRY_OPEN",
+        "venue": "東京武道館",
+        "description": "全国から強豪チームが集結する権威ある大会です。",
+        "rules": "全日本剣道連盟規則に準拠",
+        "canViewBracket": true,
+        "canViewResults": true,
+        "statisticsSummary": {
+            "currentEntries": 16,
+            "completionRate": 50,
+            "estimatedDuration": "8時間"
+        }
+    },
+    "participants": {
+        "content": [
+            {
+                "entryId": 456,
+                "entryName": "東京剣道クラブA",
+                "clubName": "東京剣道クラブ",
+                "status": "APPROVED",
+                "seed": 1,
+                "playerCount": 7,
+                "registeredAt": "2024-01-15T10:30:00",
+                "canView": true,
+                "results": null
+            }
+        ],
+        "totalElements": 16,
+        "number": 0,
+        "size": 20
+    },
+    "schedule": [
+        {
+            "id": 1,
+            "eventName": "開会式",
+            "startTime": "2024-03-15T09:00:00",
+            "endTime": "2024-03-15T09:30:00",
+            "venue": "東京武道館 メインアリーナ",
+            "eventType": "OPENING_CEREMONY",
+            "status": "SCHEDULED"
+        },
+        {
+            "id": 2,
+            "eventName": "1回戦",
+            "startTime": "2024-03-15T10:00:00",
+            "endTime": "2024-03-15T12:00:00",
+            "venue": "東京武道館 全コート",
+            "eventType": "MATCH",
+            "status": "SCHEDULED"
+        }
+    ],
+    "statistics": {
+        "totalEntries": 16,
+        "totalClubs": 14,
+        "totalPlayers": 80,
+        "entryDistribution": {
+            "東京剣道クラブ": 2,
+            "大阪剣道クラブ": 1
+        },
+        "geographicDistribution": {
+            "東京都": 6,
+            "大阪府": 4,
+            "神奈川県": 3
+        },
+        "registrationTimeline": [
+            {
+                "date": "2024-01-15",
+                "dailyRegistrations": 3,
+                "cumulativeRegistrations": 3
+            }
+        ],
+        "progressStats": {
+            "completedMatches": 0,
+            "totalMatches": 15,
+            "currentRound": 0
+        }
+    },
+    "relatedTournaments": [
+        {
+            "id": 124,
+            "name": "第29回 全日本剣道選手権大会",
+            "hostClubName": "東京剣道連盟",
+            "eventDate": "2023-03-15"
+        }
+    ],
+    "accessPermissions": {
+        "canViewBasicInfo": true,
+        "canViewParticipants": true,
+        "canViewContactInfo": false,
+        "canViewBracket": true,
+        "canViewResults": true,
+        "canViewStatistics": true,
+        "canExportData": false,
+        "accessLevel": "PUBLIC",
+        "restrictions": []
+    },
+    "viewHistory": {
+        "firstViewedAt": "2024-01-16T14:30:00",
+        "viewCount": 1,
+        "lastViewedFrom": "東京都"
+    }
+}
+```
+
+==== 参加者一覧取得リクエスト
+
+```
+GET /api/tournaments/123/participants?page=0&size=10
+Authorization: Bearer {jwt-token}
+```
+
+==== 大会統計取得リクエスト
+
+```
+GET /api/tournaments/123/statistics
+Authorization: Bearer {jwt-token}
+```

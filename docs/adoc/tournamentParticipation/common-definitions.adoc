@@ -1,0 +1,865 @@
+= 大会参加管理機能 共通定義
+
+== 概要
+
+大会参加管理機能で共通して使用されるEntity、Dto、エラーメッセージ等を定義する。
+各機能の詳細設計書では、この共通定義を参照することで重複を避ける。
+
+== 共通Entity定義
+
+=== TournamentTeamEntryEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|団体戦エントリーID（自動採番）
+
+|tournamentId
+|Long
+|対象大会ID
+
+|clubId
+|Long
+|所属クラブID
+
+|teamName
+|String
+|チーム名（自由入力）
+
+|status
+|EntryStatus
+|エントリー状態
+
+|appliedAt
+|LocalDateTime
+|申請日時
+
+|approvedAt
+|LocalDateTime
+|承認日時（任意）
+
+|withdrawnAt
+|LocalDateTime
+|取り下げ日時（任意）
+
+|comment
+|String
+|申請コメント（任意）
+
+|createdBy
+|Long
+|作成ユーザーID
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== TournamentTeamRosterEntity
+
+|===
+|フィールド名 |型 |説明
+
+|teamEntryId
+|Long
+|対象チームエントリーID（複合PK）
+
+|position
+|PlayerPosition
+|ポジション（複合PK）
+
+|playerName
+|String
+|選手名
+
+|clubId
+|Long
+|選手の所属クラブID
+
+|isSubstitute
+|Boolean
+|補欠選手フラグ
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== EntryChangeRequestEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|変更申請ID（自動採番）
+
+|teamEntryId
+|Long
+|対象チームエントリーID
+
+|changeType
+|ChangeType
+|変更種別
+
+|requestData
+|String
+|変更内容（JSON形式）
+
+|status
+|ChangeRequestStatus
+|申請状態
+
+|reason
+|String
+|変更理由
+
+|requestedBy
+|Long
+|申請者ID
+
+|requestedAt
+|LocalDateTime
+|申請日時
+
+|processedBy
+|Long
+|処理者ID（任意）
+
+|processedAt
+|LocalDateTime
+|処理日時（任意）
+
+|processComment
+|String
+|処理コメント（任意）
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+== 共通Enum定義
+
+=== EntryStatus
+
+|===
+|値 |説明
+
+|PENDING
+|申請中（主催者による承認待ち）
+
+|APPROVED
+|承認済み（参加確定）
+
+|REJECTED
+|拒否済み（参加不許可）
+
+|WITHDRAWN
+|取り下げ済み（参加辞退）
+|===
+
+=== PlayerPosition
+
+|===
+|値 |表示名 |説明
+
+|SENPO
+|先鋒
+|1番手選手
+
+|JIHO
+|次鋒
+|2番手選手
+
+|CHUKEN
+|中堅
+|3番手選手
+
+|FUKUSHO
+|副将
+|4番手選手
+
+|TAISHO
+|大将
+|5番手選手
+
+|SUBSTITUTE_1
+|補欠1
+|1番補欠選手
+
+|SUBSTITUTE_2
+|補欠2
+|2番補欠選手
+|===
+
+=== ChangeType
+
+|===
+|値 |説明
+
+|TEAM_NAME
+|チーム名変更
+
+|ROSTER_CHANGE
+|選手構成変更
+
+|SUBSTITUTE_CHANGE
+|補欠選手変更
+
+|WITHDRAWAL
+|参加取り下げ
+|===
+
+=== ChangeRequestStatus
+
+|===
+|値 |説明
+
+|PENDING
+|変更申請中
+
+|APPROVED
+|変更承認済み
+
+|REJECTED
+|変更拒否済み
+
+|CANCELLED
+|申請取り消し
+|===
+
+== 共通Dto定義
+
+=== TournamentTeamEntryDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|エントリーID
+
+|tournamentId
+|Long
+|大会ID
+
+|tournamentName
+|String
+|大会名
+
+|tournamentDate
+|LocalDate
+|開催日
+
+|clubId
+|Long
+|クラブID
+
+|clubName
+|String
+|クラブ名
+
+|teamName
+|String
+|チーム名
+
+|status
+|EntryStatus
+|エントリー状態
+
+|roster
+|List<TeamRosterDto>
+|選手構成（登録済みの場合）
+
+|canEdit
+|Boolean
+|編集可能フラグ
+
+|canWithdraw
+|Boolean
+|取り下げ可能フラグ
+
+|appliedAt
+|LocalDateTime
+|申請日時
+
+|approvedAt
+|LocalDateTime
+|承認日時
+
+|comment
+|String
+|申請コメント
+|===
+
+=== TeamRosterDto
+
+|===
+|フィールド名 |型 |説明
+
+|position
+|PlayerPosition
+|ポジション
+
+|positionDisplay
+|String
+|ポジション表示名
+
+|playerName
+|String
+|選手名
+
+|clubId
+|Long
+|選手の所属クラブID
+
+|clubName
+|String
+|選手の所属クラブ名
+
+|isSubstitute
+|Boolean
+|補欠選手フラグ
+|===
+
+=== EntryChangeRequestDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|変更申請ID
+
+|teamEntryId
+|Long
+|対象エントリーID
+
+|changeType
+|ChangeType
+|変更種別
+
+|changeTypeDisplay
+|String
+|変更種別表示名
+
+|requestData
+|Object
+|変更内容（型は変更種別による）
+
+|status
+|ChangeRequestStatus
+|申請状態
+
+|reason
+|String
+|変更理由
+
+|requestedBy
+|Long
+|申請者ID
+
+|requestedAt
+|LocalDateTime
+|申請日時
+
+|processedAt
+|LocalDateTime
+|処理日時
+
+|processComment
+|String
+|処理コメント
+|===
+
+=== TournamentSearchDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|大会ID
+
+|name
+|String
+|大会名
+
+|hostClubName
+|String
+|主催クラブ名
+
+|eventDate
+|LocalDate
+|開催日
+
+|entryDeadline
+|LocalDate
+|エントリー締切日
+
+|tournamentType
+|TournamentType
+|大会種別
+
+|status
+|TournamentStatus
+|大会ステータス
+
+|currentParticipants
+|Integer
+|現在の参加者数
+
+|maxParticipants
+|Integer
+|参加上限数
+
+|canEntry
+|Boolean
+|エントリー可能フラグ
+
+|isAlreadyEntered
+|Boolean
+|既にエントリー済みフラグ
+|===
+
+== 共通バリデーション
+
+=== チーム名バリデーション
+
+|===
+|項目 |ルール |エラーメッセージID
+
+|必須チェック
+|@NotBlank
+|MSG_PTC_0001
+
+|文字数制限
+|@Size(max=50)
+|MSG_PTC_0002
+|===
+
+=== 選手名バリデーション
+
+|===
+|項目 |ルール |エラーメッセージID
+
+|必須チェック
+|@NotBlank
+|MSG_PTC_0003
+
+|文字数制限
+|@Size(max=30)
+|MSG_PTC_0004
+|===
+
+=== 権限チェック
+
+|===
+|チェック項目 |条件 |エラーメッセージID
+
+|クラブ管理者権限
+|currentUser.isClubAdmin(clubId)
+|MSG_PTC_0005
+
+|エントリー締切チェック
+|tournament.entryDeadline >= today
+|MSG_PTC_0006
+
+|編集期限チェック
+|tournament.eventDate >= today
+|MSG_PTC_0007
+|===
+
+== 共通エラーメッセージ一覧
+
+|===
+|メッセージID |エラー内容 |ステータス
+
+|MSG_PTC_0001
+|チーム名は必須です。
+|400
+
+|MSG_PTC_0002
+|チーム名は50文字以内で入力してください。
+|400
+
+|MSG_PTC_0003
+|選手名は必須です。
+|400
+
+|MSG_PTC_0004
+|選手名は30文字以内で入力してください。
+|400
+
+|MSG_PTC_0005
+|この操作にはクラブ管理者権限が必要です。
+|403
+
+|MSG_PTC_0006
+|エントリー締切を過ぎています。
+|403
+
+|MSG_PTC_0007
+|大会開催後は編集できません。
+|403
+
+|MSG_PTC_0008
+|指定された大会が見つかりません。
+|404
+
+|MSG_PTC_0009
+|指定されたエントリーが見つかりません。
+|404
+
+|MSG_PTC_0010
+|既にこの大会にエントリー済みです。
+|409
+
+|MSG_PTC_0011
+|参加上限に達しているため、エントリーできません。
+|409
+
+|MSG_PTC_0012
+|必要な選手が登録されていません。
+|400
+
+|MSG_PTC_0013
+|同じ選手が複数のポジションに登録されています。
+|400
+
+|MSG_PTC_0014
+|このエントリーは既に処理済みです。
+|409
+
+|MSG_PTC_0015
+|エントリー受付期間外です。
+|409
+
+|MSG_PTC_0016
+|変更申請が見つかりません。
+|404
+
+|MSG_PTC_0017
+|取り下げできない状態です。
+|409
+
+|MSG_PTC_0018
+|コメントは500文字以内で入力してください。
+|400
+
+|MSG_PTC_0019
+|登録できる選手は最大7名です。
+|400
+
+|MSG_PTC_0020
+|このエントリーを編集する権限がありません。
+|403
+
+|MSG_PTC_0021
+|選手登録期限を過ぎています。
+|403
+
+|MSG_PTC_0022
+|承認済みのエントリーは変更できません。
+|409
+
+|MSG_PTC_0023
+|変更種別は必須です。
+|400
+
+|MSG_PTC_0024
+|変更理由は必須です。
+|400
+
+|MSG_PTC_0025
+|変更理由は500文字以内で入力してください。
+|400
+
+|MSG_PTC_0026
+|このエントリーは編集できません。
+|409
+
+|MSG_PTC_0027
+|未処理の変更申請があるため、新しい申請はできません。
+|409
+
+|MSG_PTC_0028
+|キャンセル理由は必須です。
+|400
+
+|MSG_PTC_0029
+|キャンセル理由は500文字以内で入力してください。
+|400
+
+|MSG_PTC_0030
+|緊急時は連絡先の入力が必要です。
+|400
+
+|MSG_PTC_0031
+|連絡先は200文字以内で入力してください。
+|400
+
+|MSG_PTC_0032
+|このエントリーをキャンセルする権限がありません。
+|403
+
+|MSG_PTC_0033
+|既にキャンセル申請済みです。
+|409
+
+|MSG_PTC_0034
+|キャンセル期限を過ぎています。
+|403
+|===
+
+== 共通Service定義
+
+=== ParticipationPermissionService
+
+大会参加に関する権限チェックを行う共通サービス
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|canEntryTournament
+|Long clubId, Long tournamentId
+|Boolean
+|指定クラブが大会にエントリー可能かどうか
+
+|canEditEntry
+|Long userId, Long entryId
+|Boolean
+|指定ユーザーがエントリーを編集可能かどうか
+
+|validateClubAdminPermission
+|Long userId, Long clubId
+|void
+|クラブ管理者権限をチェック（例外スロー）
+
+|validateEntryDeadline
+|Long tournamentId
+|void
+|エントリー締切をチェック（例外スロー）
+
+|validateEditPermission
+|Long userId, Long entryId
+|void
+|編集権限をチェック（例外スロー）
+|===
+
+=== ParticipationNotificationService
+
+大会参加関連の通知を行う共通サービス
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|notifyEntrySubmitted
+|Long entryId
+|void
+|エントリー申請完了を関係者に通知
+
+|notifyEntryApproved
+|Long entryId
+|void
+|エントリー承認を申請クラブに通知
+
+|notifyEntryRejected
+|Long entryId
+|void
+|エントリー拒否を申請クラブに通知
+
+|notifyChangeRequested
+|Long changeRequestId
+|void
+|変更申請を主催者に通知
+
+|notifyChangeApproved
+|Long changeRequestId
+|void
+|変更承認を申請クラブに通知
+
+|notifyEntryDeadlineReminder
+|Long tournamentId
+|void
+|エントリー締切リマインダーを送信
+|===
+
+== 共通Repository定義
+
+=== TournamentTeamEntryRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findByClubId
+|Long clubId, Pageable pageable
+|Page<TournamentTeamEntryDto>
+|クラブのエントリー一覧を取得
+
+|findByTournamentId
+|Long tournamentId
+|List<TournamentTeamEntryDto>
+|大会のエントリー一覧を取得
+
+|findByIdWithDetails
+|Long entryId
+|Optional<TournamentTeamEntryDto>
+|エントリー詳細（大会・クラブ情報含む）を取得
+
+|insertEntry
+|TournamentTeamEntryEntity
+|void
+|エントリーを登録
+
+|updateEntry
+|TournamentTeamEntryEntity
+|void
+|エントリー情報を更新
+
+|updateStatus
+|Long entryId, EntryStatus status
+|void
+|エントリーステータスを更新
+
+|existsByClubIdAndTournamentId
+|Long clubId, Long tournamentId
+|Boolean
+|重複エントリーをチェック
+|===
+
+=== TournamentTeamRosterRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findByTeamEntryId
+|Long teamEntryId
+|List<TeamRosterDto>
+|チームの選手構成を取得
+
+|insertRoster
+|List<TournamentTeamRosterEntity>
+|void
+|選手構成を一括登録
+
+|updateRoster
+|Long teamEntryId, List<TournamentTeamRosterEntity>
+|void
+|選手構成を更新
+
+|deleteByTeamEntryId
+|Long teamEntryId
+|void
+|選手構成を削除
+
+|validateRosterCompleteness
+|Long teamEntryId
+|Boolean
+|必要選手の登録完了をチェック
+|===
+
+=== EntryChangeRequestRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findByTeamEntryId
+|Long teamEntryId
+|List<EntryChangeRequestDto>
+|エントリーの変更申請一覧を取得
+
+|insertChangeRequest
+|EntryChangeRequestEntity
+|void
+|変更申請を登録
+
+|updateStatus
+|Long requestId, ChangeRequestStatus status, String comment
+|void
+|変更申請ステータスを更新
+
+|findPendingByTeamEntryId
+|Long teamEntryId
+|List<EntryChangeRequestDto>
+|未処理の変更申請を取得
+|===
+
+== 共通定数
+
+=== ParticipationConstants
+
+|===
+|定数名 |値 |説明
+
+|MAX_TEAM_NAME_LENGTH
+|50
+|チーム名の最大文字数
+
+|MAX_PLAYER_NAME_LENGTH
+|30
+|選手名の最大文字数
+
+|REQUIRED_REGULAR_PLAYERS
+|5
+|必要正選手数（先鋒～大将）
+
+|MAX_SUBSTITUTE_PLAYERS
+|2
+|最大補欠選手数
+
+|ENTRY_DEADLINE_WARNING_DAYS
+|3
+|エントリー締切リマインダー送信日数
+
+|ROSTER_DEADLINE_WARNING_DAYS
+|1
+|選手登録締切リマインダー送信日数
+|===
+
+== 業務ルール
+
+=== エントリーライフサイクル
+
+1. **申請**: PENDING状態でエントリー作成
+2. **選手登録**: 正選手5名の登録（必須）
+3. **主催者審査**: 主催者による承認・拒否
+4. **参加確定**: APPROVED状態で参加確定
+5. **変更申請**: 必要に応じて内容変更申請
+6. **取り下げ**: 必要に応じて参加辞退申請
+
+=== 選手登録ルール
+
+* **正選手5名必須**: 先鋒、次鋒、中堅、副将、大将
+* **補欠選手**: 最大2名まで登録可能
+* **重複禁止**: 同一選手の複数ポジション登録不可
+* **所属確認**: 選手の所属クラブ確認（将来拡張）
+
+=== 編集制限ルール
+
+* **締切前**: エントリー締切前のみ新規申請可能
+* **開催前**: 大会開催前のみ内容変更可能
+* **承認制**: すべての変更は主催者承認が必要
+* **履歴保持**: 変更履歴を記録・追跡可能
+
+=== 通知ルール
+
+* **申請時**: 主催者に新規エントリー通知
+* **承認時**: 申請クラブに承認通知
+* **拒否時**: 申請クラブに拒否理由通知
+* **締切前**: リマインダー通知の自動送信

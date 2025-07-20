@@ -1,0 +1,552 @@
+= 新規登録API 詳細設計書
+
+== 概要
+
+registerApi
+
+新規ユーザーがメールアドレス、パスワード、表示名を使用してアカウントを作成するAPI。
+登録後、メール認証用のトークンを生成し、認証メールを送信する。
+
+== Bean定義
+
+=== Entity定義
+
+==== UserEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|ユーザーID（自動採番）
+
+|email
+|String
+|ログイン用メールアドレス
+
+|passwordHash
+|String
+|ハッシュ化済みパスワード
+
+|isEmailVerified
+|Boolean
+|メール認証済みフラグ（初期値：false）
+
+|isEnabled
+|Boolean
+|アカウント有効状態フラグ（初期値：true）
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+==== UserProfileEntity
+
+|===
+|フィールド名 |型 |説明
+
+|userId
+|Long
+|ユーザーID（UserEntity.id）
+
+|name
+|String
+|表示名
+
+|nickname
+|String
+|ニックネーム（初期値：null）
+
+|profileImageUrl
+|String
+|プロフィール画像URL（初期値：null）
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+==== EmailVerificationTokenEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|トークンID（自動採番）
+
+|userId
+|Long
+|ユーザーID（UserEntity.id）
+
+|token
+|String
+|認証用トークン（UUID）
+
+|expiresAt
+|LocalDateTime
+|有効期限（24時間後）
+
+|createdAt
+|LocalDateTime
+|作成日時
+|===
+
+=== Dto定義
+
+==== RegisterRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|email
+|String
+|@NotBlank, @Email, @Size(max=100)
+|ログイン用メールアドレス
+
+|password
+|String
+|@NotBlank, @Size(min=8, max=255)
+|パスワード（平文）
+
+|name
+|String
+|@NotBlank, @Size(max=50)
+|表示名
+|===
+
+==== RegisterResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|userId
+|Long
+|作成されたユーザーID
+
+|email
+|String
+|登録されたメールアドレス
+
+|name
+|String
+|登録された表示名
+
+|verificationEmailSent
+|Boolean
+|認証メール送信状態（常にtrue）
+
+|message
+|String
+|登録完了メッセージ
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|emailが空の場合
+|メールアドレスは必須です。
+|MSG_ACC_0001
+|400
+
+|2
+|emailの形式が不正な場合
+|メールアドレスの形式が正しくありません。
+|MSG_ACC_0002
+|400
+
+|3
+|emailが100文字を超える場合
+|メールアドレスは100文字以内で入力してください。
+|MSG_ACC_0007
+|400
+
+|4
+|passwordが空の場合
+|パスワードは必須です。
+|MSG_ACC_0003
+|400
+
+|5
+|passwordが8文字未満の場合
+|パスワードは8文字以上で入力してください。
+|MSG_ACC_0008
+|400
+
+|6
+|nameが空の場合
+|表示名は必須です。
+|MSG_ACC_0009
+|400
+
+|7
+|nameが50文字を超える場合
+|表示名は50文字以内で入力してください。
+|MSG_ACC_0010
+|400
+
+|8
+|emailが既に登録済みの場合
+|このメールアドレスは既に使用されています。
+|MSG_ACC_0011
+|409
+
+|9
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`AuthController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|authService
+|AuthService
+|認証処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/auth"), @RequiredArgsConstructor
+
+|メソッド
+|@PostMapping("/register")
+
+|引数
+|@RequestBody, @Validated
+|===
+
+=== メソッド名
+
+`register`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<RegisterResponseDto>
+|登録成功時にユーザー情報と確認メッセージを返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|クライアントから送信されたメールアドレス、パスワード、表示名を DTO（RegisterRequestDto）として受け取る。
+
+|2
+|サービス呼び出し
+|`authService.register(requestDto)` を呼び出す。
+
+|3
+|レスポンス生成
+|戻り値の `RegisterResponseDto` を `ResponseEntity.status(HttpStatus.CREATED).body(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* バリデーションエラーが発生した場合は適切なメッセージIDを返す  
+* メールアドレス重複時は `MSG_ACC_0011` を返す  
+* システムエラー時は `MSG_SYS_0003` を返す
+|===
+
+== Service定義
+
+=== インターフェース
+
+`AuthService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|register
+|RegisterRequestDto
+|RegisterResponseDto
+|新規ユーザーを登録し、メール認証トークンを送信する。
+|===
+
+=== 実装クラス
+
+`AuthServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|userRepository
+|UserRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+
+|passwordEncoder
+|PasswordEncoder
+|パスワードのハッシュ化に使用
+
+|emailService
+|EmailService
+|認証メール送信に使用
+
+|emailVerificationTokenRepository
+|EmailVerificationTokenRepository
+|認証トークンの管理に使用
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== パラメータ
+
+|===
+|名称 |型 |説明
+
+|requestDto
+|RegisterRequestDto
+|新規登録リクエスト情報
+|===
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|RegisterResponseDto
+|登録されたユーザー情報を含むDTO
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|メールアドレス重複チェック
+|* `userRepository.existsByEmail(email)` でメールアドレスの重複を確認  
+* 既に存在する場合は `DuplicateEmailException` をスロー → `MSG_ACC_0011`
+
+|2
+|パスワードハッシュ化
+|* `passwordEncoder.encode(password)` でパスワードをハッシュ化  
+* BCryptアルゴリズムを使用
+
+|3
+|ユーザーエンティティ作成
+|* UserEntity を生成し、以下の値をセット：  
+** email: リクエストのメールアドレス  
+** passwordHash: ハッシュ化済みパスワード  
+** isEmailVerified: false  
+** isEnabled: true  
+** createdAt, updatedAt: 現在日時
+
+|4
+|ユーザー登録
+|* `userRepository.insertUser(userEntity)` でユーザーをDBに登録  
+* 自動採番されたIDが `userEntity.id` に格納される
+
+|5
+|プロフィール作成
+|* UserProfileEntity を生成し、以下の値をセット：  
+** userId: 登録されたユーザーID  
+** name: リクエストの表示名  
+** nickname: null  
+** profileImageUrl: null  
+** createdAt, updatedAt: 現在日時
+
+|6
+|プロフィール登録
+|* `userRepository.insertUserProfile(profileEntity)` でプロフィールをDBに登録
+
+|7
+|認証トークン生成
+|* EmailVerificationTokenEntity を生成：  
+** userId: 登録されたユーザーID  
+** token: UUID.randomUUID().toString()  
+** expiresAt: 現在日時 + 24時間  
+** createdAt: 現在日時
+
+|8
+|認証トークン登録
+|* `emailVerificationTokenRepository.insertToken(tokenEntity)` でトークンをDBに登録
+
+|9
+|認証メール送信
+|* `emailService.sendVerificationEmail(email, token)` で認証メールを送信  
+* メール送信失敗時もエラーにせず、ログ出力のみ行う
+
+|10
+|レスポンス生成
+|RegisterResponseDto に以下の情報を設定して返却：  
+* userId: 登録されたユーザーID  
+* email: 登録されたメールアドレス  
+* name: 登録された表示名  
+* verificationEmailSent: true  
+* message: "登録が完了しました。認証メールを確認してください。"
+
+|–
+|エラー処理
+|* トランザクション内でエラーが発生した場合はロールバック  
+* `DuplicateEmailException` や `RuntimeException` をスローし、エラーメッセージを返す
+|===
+
+== Repository定義
+
+=== インターフェース名
+
+`UserRepository`
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== パラメータ・戻り値
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|existsByEmail
+|String email
+|Boolean
+|メールアドレスの存在確認
+
+|insertUser
+|UserEntity
+|void
+|ユーザーを `users` テーブルに登録
+
+|insertUserProfile
+|UserProfileEntity
+|void
+|プロフィールを `user_profiles` テーブルに登録
+|===
+
+=== インターフェース名
+
+`EmailVerificationTokenRepository`
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Mapper
+|===
+
+=== パラメータ・戻り値
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|insertToken
+|EmailVerificationTokenEntity
+|void
+|認証トークンを `email_verification_tokens` テーブルに登録
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== メールアドレス存在確認
+
+[source,sql]
+----
+SELECT COUNT(*) > 0
+FROM users
+WHERE email = #{email}
+----
+
+==== ユーザー登録
+
+[source,sql]
+----
+INSERT INTO users (
+    email, password_hash, is_email_verified, is_enabled, created_at, updated_at
+) VALUES (
+    #{email}, #{passwordHash}, #{isEmailVerified}, #{isEnabled}, #{createdAt}, #{updatedAt}
+)
+----
+
+==== プロフィール登録
+
+[source,sql]
+----
+INSERT INTO user_profiles (
+    user_id, name, nickname, profile_image_url, created_at, updated_at
+) VALUES (
+    #{userId}, #{name}, #{nickname}, #{profileImageUrl}, #{createdAt}, #{updatedAt}
+)
+----
+
+==== 認証トークン登録
+
+[source,sql]
+----
+INSERT INTO email_verification_tokens (
+    user_id, token, expires_at, created_at
+) VALUES (
+    #{userId}, #{token}, #{expiresAt}, #{createdAt}
+)
+----
+
+== メール設定
+
+=== 認証メール仕様
+
+|===
+|項目 |内容
+
+|件名
+|【剣道大会管理システム】メールアドレス認証のお願い
+
+|送信者
+|noreply@kendo-tournament.com
+
+|認証URL形式
+|https://domain.com/auth/verify-email?token={token}
+
+|有効期限
+|24時間
+|===
+
+=== セキュリティ考慮事項
+
+* 認証トークンはUUIDを使用し、推測困難にする
+* 認証トークンの有効期限は24時間に制限
+* メール認証完了まで、一部機能を制限する

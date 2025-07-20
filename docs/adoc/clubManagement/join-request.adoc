@@ -1,0 +1,461 @@
+= クラブ参加申請API 詳細設計書
+
+== 概要
+
+joinClubRequestApi
+
+ユーザーが既存クラブへの参加申請を行うAPI。
+クラブ検索または招待URLを利用してクラブに参加申請を送信する。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[クラブ管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== JoinClubRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|clubId
+|Long
+|@NotNull
+|参加したいクラブのID
+
+|invitationToken
+|String
+|
+|招待トークン（任意、招待URLからの場合）
+|===
+
+==== JoinClubResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|requestId
+|Long
+|作成された申請ID
+
+|club
+|ClubDto
+|申請対象のクラブ情報
+
+|status
+|JoinRequestStatus
+|申請ステータス（常にPENDING）
+
+|message
+|String
+|申請完了メッセージ
+
+|requestedAt
+|LocalDateTime
+|申請日時
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|clubIdがnullの場合
+|クラブIDは必須です。
+|MSG_SYS_0005
+|400
+
+|2
+|指定されたクラブが存在しない場合
+|指定されたクラブが見つかりません。
+|MSG_CLB_0006
+|404
+
+|3
+|既にクラブメンバーの場合
+|既にこのクラブに参加しています。
+|MSG_CLB_0008
+|409
+
+|4
+|既に参加申請済みの場合
+|既に参加申請済みです。
+|MSG_CLB_0009
+|409
+
+|5
+|招待トークンが無効な場合
+|無効な招待URLです。
+|MSG_CLB_0011
+|400
+
+|6
+|招待トークンが期限切れの場合
+|招待URLの有効期限が切れています。
+|MSG_CLB_0010
+|410
+
+|7
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`ClubController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|clubService
+|ClubService
+|クラブ管理処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/clubs"), @RequiredArgsConstructor
+
+|メソッド
+|@PostMapping("/join-request")
+
+|引数
+|@RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`requestJoinClub`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<JoinClubResponseDto>
+|申請成功時に申請情報を返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|クライアントから送信されたクラブIDと招待トークン（任意）を DTO（JoinClubRequestDto）として受け取る。
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーの ID（userId）を取得する。
+
+|3
+|サービス呼び出し
+|`clubService.requestJoinClub(requestDto, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `JoinClubResponseDto` を `ResponseEntity.status(HttpStatus.CREATED).body(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* バリデーションエラーが発生した場合は適切なメッセージIDを返す  
+* 認証情報が取得できない場合は `MSG_SYS_0008` を返す  
+* 重複申請や無効な招待URLの場合は適切なメッセージIDを返す
+|===
+
+== Service定義
+
+=== インターフェース
+
+`ClubService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|requestJoinClub
+|JoinClubRequestDto, Long userId
+|JoinClubResponseDto
+|クラブへの参加申請を作成し、管理者に通知する。
+|===
+
+=== 実装クラス
+
+`ClubServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|clubRepository
+|ClubRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+
+|clubMemberRepository
+|ClubMemberRepository
+|クラブメンバー管理に使用
+
+|clubJoinRequestRepository
+|ClubJoinRequestRepository
+|参加申請管理に使用
+
+|clubInvitationRepository
+|ClubInvitationRepository
+|招待URL検証に使用
+
+|clubNotificationService
+|ClubNotificationService
+|通知送信に使用
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== パラメータ
+
+|===
+|名称 |型 |説明
+
+|requestDto
+|JoinClubRequestDto
+|参加申請リクエスト情報
+
+|userId
+|Long
+|申請ユーザーID（認証済み）
+|===
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|JoinClubResponseDto
+|作成された申請情報を含むDTO
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|クラブ存在確認
+|* `clubRepository.findById(clubId)` でクラブの存在を確認  
+* 存在しない場合は `ClubNotFoundException` をスロー → `MSG_CLB_0006`
+
+|2
+|招待トークン検証（任意）
+|* invitationToken が指定されている場合：  
+** `clubInvitationRepository.findByToken(token)` で招待情報を取得  
+** 存在しない場合は `InvalidInvitationException` をスロー → `MSG_CLB_0011`  
+** 有効期限切れの場合は `ExpiredInvitationException` をスロー → `MSG_CLB_0010`  
+** クラブIDが一致しない場合は `InvalidInvitationException` をスロー → `MSG_CLB_0011`
+
+|3
+|メンバーシップ確認
+|* `clubMemberRepository.findByUserIdAndClubId(userId, clubId)` でメンバーシップを確認  
+* 既にメンバーの場合は `AlreadyMemberException` をスロー → `MSG_CLB_0008`
+
+|4
+|重複申請確認
+|* `clubJoinRequestRepository.findPendingByUserIdAndClubId(userId, clubId)` で未処理申請を確認  
+* 既に申請済みの場合は `DuplicateRequestException` をスロー → `MSG_CLB_0009`
+
+|5
+|申請エンティティ作成
+|* ClubJoinRequestEntity を生成し、以下の値をセット：  
+** userId: 申請ユーザーID  
+** clubId: 対象クラブID  
+** status: JoinRequestStatus.PENDING  
+** requestedAt: 現在日時  
+** createdAt, updatedAt: 現在日時
+
+|6
+|申請登録
+|* `clubJoinRequestRepository.insertRequest(requestEntity)` で申請をDBに登録  
+* 自動採番されたIDが `requestEntity.id` に格納される  
+* 登録失敗時は `RuntimeException` をスロー → `MSG_SYS_0003`
+
+|7
+|招待トークン無効化（該当時）
+|* 招待トークンが使用された場合で reusable=false の場合：  
+** `clubInvitationRepository.deleteByToken(token)` でトークンを削除
+
+|8
+|管理者通知
+|* `clubNotificationService.notifyJoinRequestReceived(clubId, userId)` で管理者に通知
+
+|9
+|レスポンス生成
+|JoinClubResponseDto に以下の情報を設定して返却：  
+* requestId: 作成された申請ID  
+* club: 対象クラブ情報（ClubDto）  
+* status: JoinRequestStatus.PENDING  
+* message: "参加申請を送信しました。管理者の承認をお待ちください。"  
+* requestedAt: 申請日時
+
+|–
+|エラー処理
+|* トランザクション内でエラーが発生した場合はロールバック  
+* 各種例外をスローし、エラーメッセージを返す
+|===
+
+== Repository定義
+
+=== ClubJoinRequestRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|insertRequest
+|ClubJoinRequestEntity
+|void
+|参加申請を `club_join_requests` テーブルに登録
+
+|findPendingByUserIdAndClubId
+|Long userId, Long clubId
+|Optional<ClubJoinRequestEntity>
+|未処理の申請を取得
+
+|findByClubId
+|Long clubId
+|List<ClubJoinRequestDto>
+|クラブの申請一覧を取得
+
+|updateRequestStatus
+|Long requestId, JoinRequestStatus status, LocalDateTime respondedAt
+|void
+|申請のステータスを更新
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 参加申請登録
+
+[source,sql]
+----
+INSERT INTO club_join_requests (
+    user_id, club_id, status, requested_at, created_at, updated_at
+) VALUES (
+    #{userId}, #{clubId}, #{status}, #{requestedAt}, #{createdAt}, #{updatedAt}
+)
+----
+
+==== 重複申請確認
+
+[source,sql]
+----
+SELECT * FROM club_join_requests
+WHERE user_id = #{userId}
+  AND club_id = #{clubId}
+  AND status = 'pending'
+LIMIT 1
+----
+
+==== 招待トークン取得
+
+[source,sql]
+----
+SELECT * FROM club_invitations
+WHERE token = #{token}
+  AND expires_at > NOW()
+----
+
+== 招待URL経由での参加
+
+=== URL形式
+
+```
+https://domain.com/clubs/join?token={uuid}
+```
+
+=== フロントエンド処理フロー
+
+1. **URL解析**: クエリパラメータからトークンを取得
+2. **トークン検証**: APIでトークンの有効性を確認
+3. **クラブ情報表示**: 招待されたクラブの詳細を表示
+4. **参加申請**: ユーザーが承諾した場合、このAPIを呼び出し
+
+=== セキュリティ考慮事項
+
+* トークンの有効期限は1時間に制限
+* 使用済みトークンは自動削除（reusable=falseの場合）
+* 不正なトークンアクセスは適切なエラーメッセージで対応
+
+== 通知機能
+
+=== 管理者通知
+
+参加申請が作成されると、対象クラブの全管理者に以下の通知を送信：
+
+* **通知内容**: 新しい参加申請の受信
+* **送信方法**: アプリ内通知 + メール通知（設定による）
+* **必要情報**: 申請者名、申請日時、承認用リンク
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== 通常の参加申請
+```json
+POST /api/clubs/join-request
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "clubId": 1
+}
+```
+
+==== 招待URL経由の参加申請
+```json
+POST /api/clubs/join-request
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "clubId": 1,
+    "invitationToken": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+==== レスポンス
+```json
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{
+    "requestId": 456,
+    "club": {
+        "id": 1,
+        "name": "東京剣道クラブ",
+        "createdBy": 123,
+        "memberCount": 5,
+        "createdAt": "2024-01-15T10:30:00"
+    },
+    "status": "PENDING",
+    "message": "参加申請を送信しました。管理者の承認をお待ちください。",
+    "requestedAt": "2024-01-15T11:45:00"
+}
+```

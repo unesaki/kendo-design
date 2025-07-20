@@ -1,0 +1,860 @@
+= 大会主催管理機能 共通定義
+
+== 概要
+
+大会主催管理機能で共通して使用されるEntity、Dto、エラーメッセージ等を定義する。
+各機能の詳細設計書では、この共通定義を参照することで重複を避ける。
+
+== 共通Entity定義
+
+=== TournamentEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|大会ID（自動採番）
+
+|name
+|String
+|大会名
+
+|hostClubId
+|Long
+|主催クラブID
+
+|eventDate
+|LocalDate
+|開催日
+
+|entryDeadline
+|LocalDate
+|エントリー締切日
+
+|tournamentType
+|TournamentType
+|大会種別（INDIVIDUAL/TEAM）
+
+|maxParticipants
+|Integer
+|参加上限数（任意）
+
+|publicScope
+|PublicScope
+|公開範囲（PUBLIC/CLUB_ONLY/REGIONAL）
+
+|status
+|TournamentStatus
+|大会ステータス
+
+|description
+|String
+|大会説明（任意）
+
+|rules
+|String
+|大会ルール（任意）
+
+|venue
+|String
+|開催場所（任意）
+
+|createdBy
+|Long
+|作成ユーザーID
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== TournamentEntryEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|エントリーID（自動採番）
+
+|tournamentId
+|Long
+|大会ID
+
+|clubId
+|Long
+|参加クラブID
+
+|teamName
+|String
+|チーム名（団体戦時）
+
+|status
+|EntryStatus
+|エントリーステータス
+
+|appliedAt
+|LocalDateTime
+|申請日時
+
+|processedAt
+|LocalDateTime
+|処理日時（任意）
+
+|processedBy
+|Long
+|処理者ID（任意）
+
+|comment
+|String
+|コメント（任意）
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== TournamentBracketEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|ブラケットID（自動採番）
+
+|tournamentId
+|Long
+|大会ID
+
+|roundNumber
+|Integer
+|ラウンド番号（1回戦、準決勝等）
+
+|matchNumber
+|Integer
+|試合番号（ラウンド内での順序）
+
+|redEntryId
+|Long
+|赤側エントリーID（任意）
+
+|whiteEntryId
+|Long
+|白側エントリーID（任意）
+
+|winnerId
+|Long
+|勝者エントリーID（任意）
+
+|status
+|MatchStatus
+|試合ステータス
+
+|scheduledAt
+|LocalDateTime
+|予定開始時刻（任意）
+
+|startedAt
+|LocalDateTime
+|実際の開始時刻（任意）
+
+|finishedAt
+|LocalDateTime
+|終了時刻（任意）
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== MatchResultEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|結果ID（自動採番）
+
+|bracketId
+|Long
+|ブラケットID
+
+|redScore
+|Integer
+|赤側スコア
+
+|whiteScore
+|Integer
+|白側スコア
+
+|resultType
+|ResultType
+|結果タイプ（WIN/DRAW/FORFEIT）
+
+|isPublished
+|Boolean
+|公開済みフラグ
+
+|notes
+|String
+|備考（任意）
+
+|enteredBy
+|Long
+|入力者ID
+
+|enteredAt
+|LocalDateTime
+|入力日時
+
+|publishedAt
+|LocalDateTime
+|公開日時（任意）
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+== 共通Enum定義
+
+=== TournamentType
+
+|===
+|値 |説明
+
+|INDIVIDUAL
+|個人戦
+
+|TEAM
+|団体戦
+|===
+
+=== PublicScope
+
+|===
+|値 |説明
+
+|PUBLIC
+|全体公開
+
+|CLUB_ONLY
+|クラブ限定公開
+
+|REGIONAL
+|地域限定公開
+|===
+
+=== TournamentStatus
+
+|===
+|値 |説明
+
+|DRAFT
+|下書き（作成中）
+
+|ENTRY_OPEN
+|エントリー受付中
+
+|ENTRY_CLOSED
+|エントリー締切済み
+
+|IN_PROGRESS
+|大会進行中
+
+|FINISHED
+|大会終了
+
+|CANCELLED
+|大会中止
+|===
+
+=== EntryStatus
+
+|===
+|値 |説明
+
+|PENDING
+|申請中（未処理）
+
+|APPROVED
+|承認済み
+
+|REJECTED
+|拒否済み
+
+|WITHDRAWN
+|取り下げ
+|===
+
+=== MatchStatus
+
+|===
+|値 |説明
+
+|SCHEDULED
+|試合予定
+
+|IN_PROGRESS
+|試合中
+
+|FINISHED
+|試合終了
+
+|CANCELLED
+|試合中止
+|===
+
+=== ResultType
+
+|===
+|値 |説明
+
+|WIN
+|勝敗決定
+
+|DRAW
+|引き分け
+
+|FORFEIT
+|不戦勝・棄権
+|===
+
+== 共通Dto定義
+
+=== TournamentDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|大会ID
+
+|name
+|String
+|大会名
+
+|hostClubId
+|Long
+|主催クラブID
+
+|hostClubName
+|String
+|主催クラブ名
+
+|eventDate
+|LocalDate
+|開催日
+
+|entryDeadline
+|LocalDate
+|エントリー締切日
+
+|tournamentType
+|TournamentType
+|大会種別
+
+|maxParticipants
+|Integer
+|参加上限数
+
+|currentParticipants
+|Integer
+|現在の参加者数
+
+|publicScope
+|PublicScope
+|公開範囲
+
+|status
+|TournamentStatus
+|大会ステータス
+
+|description
+|String
+|大会説明
+
+|venue
+|String
+|開催場所
+
+|canEdit
+|Boolean
+|編集可能フラグ（権限・期限による）
+
+|createdAt
+|LocalDateTime
+|作成日時
+|===
+
+=== TournamentEntryDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|エントリーID
+
+|tournamentId
+|Long
+|大会ID
+
+|tournamentName
+|String
+|大会名
+
+|clubId
+|Long
+|参加クラブID
+
+|clubName
+|String
+|参加クラブ名
+
+|teamName
+|String
+|チーム名
+
+|status
+|EntryStatus
+|エントリーステータス
+
+|appliedAt
+|LocalDateTime
+|申請日時
+
+|processedAt
+|LocalDateTime
+|処理日時
+
+|comment
+|String
+|コメント
+|===
+
+=== TournamentBracketDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|ブラケットID
+
+|roundNumber
+|Integer
+|ラウンド番号
+
+|matchNumber
+|Integer
+|試合番号
+
+|redEntry
+|TournamentEntryDto
+|赤側エントリー情報
+
+|whiteEntry
+|TournamentEntryDto
+|白側エントリー情報
+
+|winner
+|TournamentEntryDto
+|勝者エントリー情報
+
+|status
+|MatchStatus
+|試合ステータス
+
+|result
+|MatchResultDto
+|試合結果（任意）
+
+|scheduledAt
+|LocalDateTime
+|予定開始時刻
+
+|startedAt
+|LocalDateTime
+|実際の開始時刻
+
+|finishedAt
+|LocalDateTime
+|終了時刻
+|===
+
+=== MatchResultDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|結果ID
+
+|redScore
+|Integer
+|赤側スコア
+
+|whiteScore
+|Integer
+|白側スコア
+
+|resultType
+|ResultType
+|結果タイプ
+
+|isPublished
+|Boolean
+|公開済みフラグ
+
+|notes
+|String
+|備考
+
+|enteredAt
+|LocalDateTime
+|入力日時
+
+|publishedAt
+|LocalDateTime
+|公開日時
+|===
+
+== 共通バリデーション
+
+=== 大会作成時バリデーション
+
+|===
+|項目 |ルール |エラーメッセージID
+
+|大会名必須チェック
+|@NotBlank
+|MSG_TRN_0001
+
+|大会名文字数制限
+|@Size(max=100)
+|MSG_TRN_0002
+
+|開催日必須チェック
+|@NotNull
+|MSG_TRN_0003
+
+|開催日未来日チェック
+|eventDate >= today
+|MSG_TRN_0004
+
+|締切日必須チェック
+|@NotNull
+|MSG_TRN_0005
+
+|締切日開催日前チェック
+|entryDeadline <= eventDate
+|MSG_TRN_0006
+
+|参加上限数範囲チェック
+|@Min(2), @Max(128)
+|MSG_TRN_0007
+|===
+
+=== 権限チェック
+
+|===
+|チェック項目 |条件 |エラーメッセージID
+
+|クラブ管理者権限
+|currentUser.isClubAdmin(hostClubId)
+|MSG_TRN_0008
+
+|大会主催者権限
+|tournament.hostClubId == currentUser.currentClubId
+|MSG_TRN_0009
+
+|編集期限チェック
+|eventDate + 30日 >= today
+|MSG_TRN_0010
+|===
+
+== 共通エラーメッセージ一覧
+
+|===
+|メッセージID |エラー内容 |ステータス
+
+|MSG_TRN_0001
+|大会名は必須です。
+|400
+
+|MSG_TRN_0002
+|大会名は100文字以内で入力してください。
+|400
+
+|MSG_TRN_0003
+|開催日は必須です。
+|400
+
+|MSG_TRN_0004
+|開催日は本日以降の日付を入力してください。
+|400
+
+|MSG_TRN_0005
+|エントリー締切日は必須です。
+|400
+
+|MSG_TRN_0006
+|エントリー締切日は開催日以前の日付を入力してください。
+|400
+
+|MSG_TRN_0007
+|参加上限数は2～128の範囲で入力してください。
+|400
+
+|MSG_TRN_0008
+|この操作にはクラブ管理者権限が必要です。
+|403
+
+|MSG_TRN_0009
+|この大会の主催者ではありません。
+|403
+
+|MSG_TRN_0010
+|開催日から1ヶ月を過ぎた大会は編集できません。
+|403
+
+|MSG_TRN_0011
+|指定された大会が見つかりません。
+|404
+
+|MSG_TRN_0012
+|指定されたエントリーが見つかりません。
+|404
+
+|MSG_TRN_0013
+|エントリー受付期間外です。
+|409
+
+|MSG_TRN_0014
+|既にエントリー済みです。
+|409
+
+|MSG_TRN_0015
+|参加上限に達しています。
+|409
+
+|MSG_TRN_0016
+|トーナメント表が既に作成されています。
+|409
+
+|MSG_TRN_0017
+|試合結果が既に入力されています。
+|409
+
+|MSG_TRN_0018
+|試合が開始されていません。
+|409
+|===
+
+== 共通Service定義
+
+=== TournamentPermissionService
+
+大会に関する権限チェックを行う共通サービス
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|isTournamentHost
+|Long userId, Long tournamentId
+|Boolean
+|指定ユーザーが大会主催者かどうか
+
+|canEditTournament
+|Long tournamentId
+|Boolean
+|大会が編集可能期間内かどうか
+
+|validateTournamentHostPermission
+|Long userId, Long tournamentId
+|void
+|主催者権限をチェック（例外スロー）
+
+|validateEditPeriod
+|Long tournamentId
+|void
+|編集期間をチェック（例外スロー）
+|===
+
+=== TournamentNotificationService
+
+大会関連の通知を行う共通サービス
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|notifyEntryReceived
+|Long tournamentId, Long entryId
+|void
+|エントリー受信を主催者に通知
+
+|notifyEntryApproved
+|Long entryId
+|void
+|エントリー承認を申請者に通知
+
+|notifyEntryRejected
+|Long entryId
+|void
+|エントリー拒否を申請者に通知
+
+|notifyTournamentStarted
+|Long tournamentId
+|void
+|大会開始を参加者に通知
+
+|notifyMatchResultPublished
+|Long bracketId
+|void
+|試合結果公開を参加者に通知
+|===
+
+== 共通Repository定義
+
+=== TournamentRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findById
+|Long tournamentId
+|Optional<TournamentEntity>
+|大会IDで大会情報を取得
+
+|findByHostClubId
+|Long clubId, Pageable pageable
+|Page<TournamentDto>
+|主催クラブIDで大会一覧を取得
+
+|insertTournament
+|TournamentEntity
+|void
+|大会を登録
+
+|updateTournament
+|TournamentEntity
+|void
+|大会情報を更新
+
+|updateStatus
+|Long tournamentId, TournamentStatus status
+|void
+|大会ステータスを更新
+
+|searchTournaments
+|TournamentSearchCriteria, Pageable
+|Page<TournamentDto>
+|条件で大会を検索
+|===
+
+=== TournamentEntryRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findByTournamentId
+|Long tournamentId
+|List<TournamentEntryDto>
+|大会のエントリー一覧を取得
+
+|findByClubId
+|Long clubId
+|List<TournamentEntryDto>
+|クラブのエントリー一覧を取得
+
+|insertEntry
+|TournamentEntryEntity
+|void
+|エントリーを登録
+
+|updateEntryStatus
+|Long entryId, EntryStatus status, Long processedBy
+|void
+|エントリーステータスを更新
+
+|countApprovedEntries
+|Long tournamentId
+|Integer
+|承認済みエントリー数を取得
+|===
+
+== 共通定数
+
+=== TournamentConstants
+
+|===
+|定数名 |値 |説明
+
+|MAX_TOURNAMENT_NAME_LENGTH
+|100
+|大会名の最大文字数
+
+|MIN_PARTICIPANTS
+|2
+|最小参加者数
+
+|MAX_PARTICIPANTS
+|128
+|最大参加者数
+
+|EDIT_DEADLINE_DAYS
+|30
+|編集可能期間（開催日後の日数）
+
+|DEFAULT_PUBLIC_SCOPE
+|PUBLIC
+|デフォルト公開範囲
+
+|AUTO_ENTRY_DEADLINE_DAYS
+|7
+|自動締切日設定（開催日前の日数）
+|===
+
+== 業務ルール
+
+=== 大会ライフサイクル
+
+1. **作成**: DRAFT状態で作成
+2. **公開**: ENTRY_OPEN状態に変更でエントリー受付開始
+3. **締切**: ENTRY_CLOSED状態に変更でエントリー受付終了
+4. **開始**: IN_PROGRESS状態に変更で大会開始
+5. **終了**: FINISHED状態に変更で大会終了
+
+=== 編集制限
+
+* 開催日から1ヶ月を過ぎた大会は編集不可
+* エントリー承認後は大会種別変更不可
+* トーナメント表作成後は参加上限変更不可
+
+=== エントリー制限
+
+* エントリー期間内のみ申請可能
+* 同一大会への重複申請不可
+* 参加上限を超える申請は不可

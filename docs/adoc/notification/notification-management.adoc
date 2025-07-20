@@ -1,0 +1,1267 @@
+= お知らせ機能 詳細設計書
+
+== 概要
+
+notificationManagementApi
+
+開発者・運営者がユーザに向けてシステムの更新・障害・案内などを通知するための機能。
+全ユーザまたは条件に該当する一部ユーザに配信し、ユーザ側では削除やブックマークが可能。
+
+== Bean定義
+
+=== Entity定義
+
+==== NotificationEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|お知らせID
+
+|title
+|String
+|タイトル
+
+|content
+|String
+|本文
+
+|notificationType
+|NotificationType
+|お知らせ種別
+
+|priority
+|NotificationPriority
+|優先度
+
+|targetType
+|TargetType
+|対象種別
+
+|targetConditions
+|String
+|対象条件（JSON形式）
+
+|isActive
+|Boolean
+|有効フラグ
+
+|publishedAt
+|LocalDateTime
+|公開日時
+
+|expiresAt
+|LocalDateTime
+|有効期限
+
+|createdBy
+|Long
+|作成者ID
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+==== UserNotificationStatusEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|ユーザー通知状態ID
+
+|userId
+|Long
+|ユーザーID
+
+|notificationId
+|Long
+|お知らせID
+
+|isDeleted
+|Boolean
+|削除フラグ（ユーザー個別）
+
+|isBookmarked
+|Boolean
+|ブックマークフラグ
+
+|viewedAt
+|LocalDateTime
+|閲覧日時
+
+|deletedAt
+|LocalDateTime
+|削除日時
+
+|bookmarkedAt
+|LocalDateTime
+|ブックマーク日時
+
+|createdAt
+|LocalDateTime
+|作成日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== Dto定義
+
+==== NotificationCreateRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|title
+|String
+|@NotBlank, @Size(max=200)
+|タイトル
+
+|content
+|String
+|@NotBlank, @Size(max=5000)
+|本文
+
+|notificationType
+|NotificationType
+|@NotNull
+|お知らせ種別
+
+|priority
+|NotificationPriority
+|@NotNull
+|優先度
+
+|targetType
+|TargetType
+|@NotNull
+|対象種別
+
+|targetConditions
+|TargetConditionsDto
+|@Valid
+|対象条件
+
+|publishAt
+|LocalDateTime
+|
+|公開予定日時（即座の場合はnull）
+
+|expiresAt
+|LocalDateTime
+|@Future
+|有効期限
+
+|sendEmail
+|Boolean
+|
+|メール通知フラグ
+
+|sendPush
+|Boolean
+|
+|プッシュ通知フラグ
+
+|tags
+|List<String>
+|@Size(max=10)
+|タグ一覧
+|===
+
+==== NotificationCreateResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|notificationId
+|Long
+|作成されたお知らせID
+
+|targetUserCount
+|Integer
+|対象ユーザー数
+
+|publishedAt
+|LocalDateTime
+|公開日時
+
+|scheduledDeliveries
+|List<ScheduledDeliveryDto>
+|配信予定
+
+|validationResults
+|ValidationResultDto
+|検証結果
+
+|warnings
+|List<String>
+|警告メッセージ
+|===
+
+==== NotificationListRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|types
+|List<NotificationType>
+|
+|種別フィルター
+
+|priorities
+|List<NotificationPriority>
+|
+|優先度フィルター
+
+|includeDeleted
+|Boolean
+|
+|削除済みを含む
+
+|bookmarkedOnly
+|Boolean
+|
+|ブックマークのみ
+
+|fromDate
+|LocalDate
+|
+|開始日
+
+|toDate
+|LocalDate
+|@DateRange
+|終了日
+
+|keyword
+|String
+|@Size(max=100)
+|検索キーワード
+
+|page
+|Integer
+|@Min(0)
+|ページ番号
+
+|size
+|Integer
+|@Min(1), @Max(50)
+|ページサイズ
+
+|sortBy
+|NotificationSortType
+|
+|ソート方法
+|===
+
+==== NotificationListResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|notifications
+|Page<NotificationSummaryDto>
+|お知らせ一覧
+
+|summary
+|NotificationSummaryStatsDto
+|サマリー統計
+
+|filterOptions
+|NotificationFilterOptionsDto
+|利用可能なフィルター
+
+|userStats
+|UserNotificationStatsDto
+|ユーザー統計
+|===
+
+==== NotificationDetailDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|お知らせID
+
+|title
+|String
+|タイトル
+
+|content
+|String
+|本文
+
+|notificationType
+|NotificationType
+|お知らせ種別
+
+|priority
+|NotificationPriority
+|優先度
+
+|publishedAt
+|LocalDateTime
+|公開日時
+
+|expiresAt
+|LocalDateTime
+|有効期限
+
+|isBookmarked
+|Boolean
+|ブックマーク状態
+
+|viewedAt
+|LocalDateTime
+|閲覧日時
+
+|tags
+|List<String>
+|タグ一覧
+
+|createdBy
+|UserSummaryDto
+|作成者情報
+
+|statistics
+|NotificationStatisticsDto
+|統計情報
+
+|relatedNotifications
+|List<NotificationSummaryDto>
+|関連お知らせ
+|===
+
+==== TargetConditionsDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|clubIds
+|List<Long>
+|
+|対象クラブID一覧
+
+|userIds
+|List<Long>
+|
+|対象ユーザーID一覧
+
+|roles
+|List<UserRole>
+|
+|対象ロール一覧
+
+|joinDateFrom
+|LocalDate
+|
+|登録日開始
+
+|joinDateTo
+|LocalDate
+|
+|登録日終了
+
+|regions
+|List<String>
+|
+|対象地域一覧
+
+|activityLevel
+|ActivityLevel
+|
+|活動レベル
+
+|excludeUserIds
+|List<Long>
+|
+|除外ユーザーID一覧
+
+|customConditions
+|Map<String, Object>
+|
+|カスタム条件
+|===
+
+=== Enum定義
+
+==== NotificationType
+
+|===
+|値 |表示名 |説明
+
+|SYSTEM_UPDATE
+|システム更新
+|システムアップデート情報
+
+|MAINTENANCE
+|メンテナンス
+|メンテナンス予定・完了
+
+|FEATURE_ANNOUNCEMENT
+|新機能案内
+|新機能の紹介
+
+|EVENT_ANNOUNCEMENT
+|イベント案内
+|大会・イベント情報
+
+|IMPORTANT_NOTICE
+|重要なお知らせ
+|重要な連絡事項
+
+|TECHNICAL_ISSUE
+|技術的問題
+|障害・技術的問題
+
+|GENERAL_INFO
+|一般情報
+|一般的な情報
+
+|EMERGENCY
+|緊急
+|緊急時の通知
+|===
+
+==== NotificationPriority
+
+|===
+|値 |表示名 |説明 |表示スタイル
+
+|EMERGENCY
+|緊急
+|緊急対応が必要
+|赤色、点滅
+
+|HIGH
+|高
+|早急な確認が必要
+|赤色
+
+|MEDIUM
+|中
+|通常の重要度
+|オレンジ色
+
+|LOW
+|低
+|参考情報
+|青色
+
+|INFO
+|情報
+|単なる情報提供
+|グレー
+|===
+
+==== TargetType
+
+|===
+|値 |説明
+
+|ALL_USERS
+|全ユーザー
+
+|CLUB_MEMBERS
+|特定クラブメンバー
+
+|ROLE_BASED
+|ロールベース
+
+|CUSTOM_CONDITION
+|カスタム条件
+
+|SPECIFIC_USERS
+|特定ユーザー
+
+|REGION_BASED
+|地域ベース
+|===
+
+==== NotificationSortType
+
+|===
+|値 |説明
+
+|PUBLISHED_DESC
+|公開日時降順
+
+|PUBLISHED_ASC
+|公開日時昇順
+
+|PRIORITY_DESC
+|優先度降順
+
+|TITLE_ASC
+|タイトル昇順
+
+|TYPE_ASC
+|種別昇順
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|titleが空の場合
+|タイトルは必須です。
+|MSG_NOTIFICATION_0001
+|400
+
+|2
+|contentが空の場合
+|本文は必須です。
+|MSG_NOTIFICATION_0002
+|400
+
+|3
+|対象ユーザーが存在しない場合
+|対象ユーザーが見つかりません。
+|MSG_NOTIFICATION_0003
+|400
+
+|4
+|有効期限が過去の場合
+|有効期限は未来の日時を指定してください。
+|MSG_NOTIFICATION_0004
+|400
+
+|5
+|お知らせが見つからない場合
+|指定されたお知らせが見つかりません。
+|MSG_NOTIFICATION_0005
+|404
+
+|6
+|削除権限がない場合
+|このお知らせを削除する権限がありません。
+|MSG_NOTIFICATION_0006
+|403
+
+|7
+|作成権限がない場合
+|お知らせを作成する権限がありません。
+|MSG_NOTIFICATION_0007
+|403
+
+|8
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== お知らせ管理Controller
+
+==== クラス名
+
+`NotificationManagementController`
+
+==== フィールド
+
+|===
+|名称 |型 |説明
+
+|notificationService
+|NotificationService
+|お知らせ処理を行うサービス。`@RequiredArgsConstructor` によりインジェクション。
+|===
+
+==== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/admin/notifications"), @RequiredArgsConstructor
+
+|メソッド（お知らせ作成）
+|@PostMapping
+
+|メソッド（お知らせ一覧取得）
+|@GetMapping
+
+|メソッド（お知らせ更新）
+|@PutMapping("/{notificationId}")
+
+|メソッド（お知らせ削除）
+|@DeleteMapping("/{notificationId}")
+
+|引数
+|@PathVariable, @RequestBody, @AuthenticationPrincipal
+|===
+
+==== メソッド名
+
+* `createNotification` - お知らせ作成
+* `getNotificationList` - お知らせ一覧取得（管理者用）
+* `updateNotification` - お知らせ更新
+* `deleteNotification` - お知らせ削除
+
+=== ユーザー向けController
+
+==== クラス名
+
+`UserNotificationController`
+
+==== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/notifications"), @RequiredArgsConstructor
+
+|メソッド（一覧取得）
+|@GetMapping
+
+|メソッド（詳細取得）
+|@GetMapping("/{notificationId}")
+
+|メソッド（ブックマーク）
+|@PostMapping("/{notificationId}/bookmark")
+
+|メソッド（削除）
+|@DeleteMapping("/{notificationId}")
+
+|引数
+|@PathVariable, @RequestParam, @AuthenticationPrincipal
+|===
+
+==== メソッド名
+
+* `getUserNotifications` - ユーザー向けお知らせ一覧取得
+* `getNotificationDetail` - お知らせ詳細取得
+* `toggleBookmark` - ブックマーク切り替え
+* `deleteUserNotification` - ユーザー側削除
+
+=== 処理詳細
+
+==== createNotification
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領・認証
+|リクエストボディからお知らせ作成データを取得。
+管理者権限を確認。
+
+|2
+|権限確認
+|notificationPermissionService.validateCreatePermission(userId) で作成権限を確認。
+
+|3
+|対象ユーザー計算
+|targetConditions に基づいて対象ユーザーを計算。
+
+|4
+|サービス呼び出し
+|notificationService.createNotification(requestDto, userId) を呼び出す。
+
+|5
+|配信処理
+|メール・プッシュ通知の配信処理を開始。
+
+|6
+|レスポンス生成
+|作成結果を含む NotificationCreateResponseDto を返却。
+
+|–
+|エラー処理
+|* 作成権限がない場合は MSG_NOTIFICATION_0007 を返却  
+* 対象ユーザーが見つからない場合は MSG_NOTIFICATION_0003 を返却
+|===
+
+== Service定義
+
+=== インターフェース
+
+`NotificationService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|createNotification
+|NotificationCreateRequestDto, Long userId
+|NotificationCreateResponseDto
+|お知らせを作成し、対象ユーザーに配信する
+
+|getUserNotifications
+|NotificationListRequestDto, Long userId
+|NotificationListResponseDto
+|ユーザー向けお知らせ一覧を取得する
+
+|getNotificationDetail
+|Long notificationId, Long userId
+|NotificationDetailDto
+|お知らせ詳細を取得する
+
+|toggleBookmark
+|Long notificationId, Long userId
+|UserNotificationStatusDto
+|ブックマーク状態を切り替える
+
+|deleteUserNotification
+|Long notificationId, Long userId
+|void
+|ユーザー側でお知らせを削除（非表示）する
+
+|calculateTargetUsers
+|TargetConditionsDto
+|List<Long>
+|対象条件からユーザーIDリストを計算する
+|===
+
+=== 実装クラス
+
+`NotificationServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|notificationRepository
+|NotificationRepository
+|お知らせデータ管理用リポジトリ
+
+|userNotificationStatusRepository
+|UserNotificationStatusRepository
+|ユーザー通知状態管理用リポジトリ
+
+|targetCalculationService
+|TargetCalculationService
+|対象ユーザー計算用サービス
+
+|notificationDeliveryService
+|NotificationDeliveryService
+|配信処理サービス
+
+|notificationPermissionService
+|NotificationPermissionService
+|権限チェックサービス
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== 処理詳細
+
+==== createNotification
+
+|===
+|順序 |概要 |詳細
+
+|1
+|対象ユーザー計算
+|* targetCalculationService.calculateTargetUsers() で対象ユーザーを計算  
+* 対象ユーザーが0件の場合は警告を生成
+
+|2
+|お知らせ作成
+|* notificationRepository.save() でお知らせを保存  
+* ID採番とタイムスタンプを設定
+
+|3
+|ユーザー通知状態初期化
+|* 対象ユーザーごとの UserNotificationStatusEntity を作成  
+* 初期状態（未削除・未ブックマーク）で保存
+
+|4
+|配信処理開始
+|* sendEmail が true の場合、メール配信を開始  
+* sendPush が true の場合、プッシュ通知配信を開始  
+* 非同期処理で実行
+
+|5
+|統計情報更新
+|* お知らせ作成統計を更新  
+* 対象ユーザー数等の記録
+
+|6
+|レスポンス生成
+|NotificationCreateResponseDto を生成して返却
+|===
+
+==== getUserNotifications
+
+|===
+|順序 |概要 |詳細
+
+|1
+|フィルター条件構築
+|* リクエストパラメータからフィルター条件を構築  
+* ユーザーの削除状態を考慮
+
+|2
+|お知らせ一覧取得
+|* notificationRepository.findUserNotifications() でお知らせ一覧を取得  
+* ページネーション適用
+
+|3
+|ユーザー状態情報付加
+|* 各お知らせにユーザーのブックマーク・削除状態を付加  
+* 閲覧日時情報を含める
+
+|4
+|統計情報計算
+|* 未読件数、ブックマーク件数等を計算
+
+|5
+|レスポンス生成
+|NotificationListResponseDto を生成して返却
+|===
+
+== TargetCalculationService定義
+
+対象ユーザー計算を行う専用サービス
+
+=== メソッド定義
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|calculateTargetUsers
+|TargetConditionsDto
+|List<Long>
+|条件に応じた対象ユーザーを計算
+
+|calculateByClubIds
+|List<Long> clubIds
+|List<Long>
+|クラブIDから対象ユーザーを計算
+
+|calculateByRoles
+|List<UserRole> roles
+|List<Long>
+|ロールから対象ユーザーを計算
+
+|calculateByRegions
+|List<String> regions
+|List<Long>
+|地域から対象ユーザーを計算
+
+|calculateByActivityLevel
+|ActivityLevel level
+|List<Long>
+|活動レベルから対象ユーザーを計算
+
+|excludeUsers
+|List<Long> userIds, List<Long> excludeIds
+|List<Long>
+|除外ユーザーを適用
+|===
+
+=== 対象ユーザー計算ロジック
+
+```java
+public List<Long> calculateTargetUsers(TargetConditionsDto conditions) {
+    Set<Long> targetUsers = new HashSet<>();
+    
+    // 基本条件による対象ユーザー取得
+    switch (conditions.getTargetType()) {
+        case ALL_USERS:
+            targetUsers.addAll(getAllActiveUsers());
+            break;
+        case CLUB_MEMBERS:
+            targetUsers.addAll(calculateByClubIds(conditions.getClubIds()));
+            break;
+        case ROLE_BASED:
+            targetUsers.addAll(calculateByRoles(conditions.getRoles()));
+            break;
+        case SPECIFIC_USERS:
+            targetUsers.addAll(conditions.getUserIds());
+            break;
+        case REGION_BASED:
+            targetUsers.addAll(calculateByRegions(conditions.getRegions()));
+            break;
+    }
+    
+    // 追加フィルター適用
+    if (conditions.getJoinDateFrom() != null || conditions.getJoinDateTo() != null) {
+        targetUsers = filterByJoinDate(targetUsers, conditions.getJoinDateFrom(), conditions.getJoinDateTo());
+    }
+    
+    if (conditions.getActivityLevel() != null) {
+        targetUsers = filterByActivityLevel(targetUsers, conditions.getActivityLevel());
+    }
+    
+    // 除外ユーザー適用
+    if (conditions.getExcludeUserIds() != null) {
+        targetUsers.removeAll(conditions.getExcludeUserIds());
+    }
+    
+    return new ArrayList<>(targetUsers);
+}
+```
+
+== Repository定義
+
+=== 使用メソッド
+
+==== NotificationRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|save
+|NotificationEntity
+|NotificationEntity
+|お知らせを保存
+
+|findUserNotifications
+|Long userId, NotificationListRequestDto, Pageable
+|Page<NotificationSummaryDto>
+|ユーザー向けお知らせ一覧を取得
+
+|findById
+|Long notificationId
+|Optional<NotificationEntity>
+|お知らせを取得
+
+|findActiveNotifications
+|LocalDateTime now
+|List<NotificationEntity>
+|有効なお知らせ一覧を取得
+
+|deleteById
+|Long notificationId
+|void
+|お知らせを削除
+|===
+
+==== UserNotificationStatusRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|save
+|UserNotificationStatusEntity
+|UserNotificationStatusEntity
+|ユーザー通知状態を保存
+
+|findByUserIdAndNotificationId
+|Long userId, Long notificationId
+|Optional<UserNotificationStatusEntity>
+|ユーザー通知状態を取得
+
+|bulkInsert
+|List<UserNotificationStatusEntity>
+|void
+|一括挿入
+
+|updateBookmarkStatus
+|Long userId, Long notificationId, Boolean isBookmarked
+|void
+|ブックマーク状態を更新
+
+|updateDeleteStatus
+|Long userId, Long notificationId, Boolean isDeleted
+|void
+|削除状態を更新
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== ユーザー向けお知らせ一覧取得
+
+[source,sql]
+----
+SELECT 
+    n.id,
+    n.title,
+    n.notification_type,
+    n.priority,
+    n.published_at,
+    n.expires_at,
+    uns.is_bookmarked,
+    uns.viewed_at,
+    uns.is_deleted
+FROM notifications n
+LEFT JOIN user_notification_status uns ON n.id = uns.notification_id AND uns.user_id = #{userId}
+WHERE n.is_active = true
+  AND n.published_at <= NOW()
+  AND (n.expires_at IS NULL OR n.expires_at > NOW())
+  AND (uns.is_deleted IS NULL OR uns.is_deleted = false)
+  AND (#{types} IS NULL OR n.notification_type IN 
+    <foreach collection="types" item="type" open="(" separator="," close=")">
+        #{type}
+    </foreach>)
+  AND (#{priorities} IS NULL OR n.priority IN 
+    <foreach collection="priorities" item="priority" open="(" separator="," close=")">
+        #{priority}
+    </foreach>)
+  AND (#{keyword} IS NULL OR 
+       n.title LIKE CONCAT('%', #{keyword}, '%') OR 
+       n.content LIKE CONCAT('%', #{keyword}, '%'))
+  AND (#{bookmarkedOnly} = false OR uns.is_bookmarked = true)
+ORDER BY 
+  CASE #{sortBy}
+    WHEN 'PRIORITY_DESC' THEN 
+      CASE n.priority
+        WHEN 'EMERGENCY' THEN 1
+        WHEN 'HIGH' THEN 2
+        WHEN 'MEDIUM' THEN 3
+        WHEN 'LOW' THEN 4
+        WHEN 'INFO' THEN 5
+      END
+    ELSE n.published_at
+  END DESC
+LIMIT #{limit} OFFSET #{offset}
+----
+
+==== 対象ユーザー計算（クラブメンバー）
+
+[source,sql]
+----
+SELECT DISTINCT cm.user_id
+FROM club_members cm
+JOIN clubs c ON cm.club_id = c.id
+WHERE cm.club_id IN 
+  <foreach collection="clubIds" item="clubId" open="(" separator="," close=")">
+    #{clubId}
+  </foreach>
+  AND cm.status = 'ACTIVE'
+  AND c.is_active = true
+----
+
+==== 対象ユーザー計算（ロールベース）
+
+[source,sql]
+----
+SELECT DISTINCT u.id
+FROM users u
+JOIN club_members cm ON u.id = cm.user_id
+WHERE cm.role IN 
+  <foreach collection="roles" item="role" open="(" separator="," close=")">
+    #{role}
+  </foreach>
+  AND u.is_active = true
+  AND cm.status = 'ACTIVE'
+----
+
+== 配信機能
+
+=== NotificationDeliveryService定義
+
+配信処理を行う専用サービス
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|sendEmailNotifications
+|Long notificationId, List<Long> userIds
+|EmailDeliveryResultDto
+|メール通知を送信
+
+|sendPushNotifications
+|Long notificationId, List<Long> userIds
+|PushDeliveryResultDto
+|プッシュ通知を送信
+
+|scheduleDelivery
+|Long notificationId, LocalDateTime deliveryTime
+|void
+|配信をスケジュール
+
+|getDeliveryStatus
+|Long notificationId
+|DeliveryStatusDto
+|配信状況を取得
+|===
+
+=== 配信処理（非同期）
+
+```java
+@Async
+public CompletableFuture<EmailDeliveryResultDto> sendEmailNotifications(Long notificationId, List<Long> userIds) {
+    try {
+        NotificationEntity notification = notificationRepository.findById(notificationId)
+            .orElseThrow(() -> new NotificationNotFoundException());
+        
+        List<UserEntity> users = userRepository.findByIds(userIds);
+        
+        int successCount = 0;
+        int failureCount = 0;
+        
+        for (UserEntity user : users) {
+            try {
+                emailService.sendNotificationEmail(user.getEmail(), notification);
+                successCount++;
+            } catch (Exception e) {
+                failureCount++;
+                log.warn("Failed to send email to user: {}", user.getId(), e);
+            }
+        }
+        
+        return CompletableFuture.completedFuture(
+            EmailDeliveryResultDto.builder()
+                .successCount(successCount)
+                .failureCount(failureCount)
+                .build()
+        );
+    } catch (Exception e) {
+        log.error("Failed to send email notifications", e);
+        return CompletableFuture.failedFuture(e);
+    }
+}
+```
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== お知らせ作成リクエスト
+
+```
+POST /api/admin/notifications
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "title": "システムメンテナンスのお知らせ",
+    "content": "2024年3月20日(水) 2:00-4:00にシステムメンテナンスを実施いたします。この間、サービスをご利用いただけません。ご迷惑をおかけいたしますが、ご理解のほどよろしくお願いいたします。",
+    "notificationType": "MAINTENANCE",
+    "priority": "HIGH",
+    "targetType": "ALL_USERS",
+    "targetConditions": {
+        "excludeUserIds": [100, 200]
+    },
+    "expiresAt": "2024-03-21T00:00:00",
+    "sendEmail": true,
+    "sendPush": true,
+    "tags": ["メンテナンス", "重要"]
+}
+```
+
+==== お知らせ作成レスポンス
+
+```json
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{
+    "notificationId": 12345,
+    "targetUserCount": 1540,
+    "publishedAt": "2024-03-15T10:00:00",
+    "scheduledDeliveries": [
+        {
+            "type": "EMAIL",
+            "scheduledAt": "2024-03-15T10:01:00",
+            "targetCount": 1540,
+            "status": "SCHEDULED"
+        },
+        {
+            "type": "PUSH",
+            "scheduledAt": "2024-03-15T10:01:00",
+            "targetCount": 1540,
+            "status": "SCHEDULED"
+        }
+    ],
+    "validationResults": {
+        "isValid": true,
+        "warnings": [
+            "対象ユーザーから2名を除外しました"
+        ]
+    },
+    "warnings": []
+}
+```
+
+==== ユーザー向けお知らせ一覧取得リクエスト
+
+```
+GET /api/notifications?page=0&size=20&types=MAINTENANCE,IMPORTANT_NOTICE&sortBy=PRIORITY_DESC
+Authorization: Bearer {jwt-token}
+```
+
+==== ユーザー向けお知らせ一覧取得レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "notifications": {
+        "content": [
+            {
+                "id": 12345,
+                "title": "システムメンテナンスのお知らせ",
+                "notificationType": "MAINTENANCE",
+                "priority": "HIGH",
+                "publishedAt": "2024-03-15T10:00:00",
+                "expiresAt": "2024-03-21T00:00:00",
+                "isBookmarked": false,
+                "viewedAt": null,
+                "tags": ["メンテナンス", "重要"]
+            }
+        ],
+        "totalElements": 1,
+        "number": 0,
+        "size": 20
+    },
+    "summary": {
+        "totalNotifications": 1,
+        "unreadCount": 1,
+        "bookmarkedCount": 0,
+        "highPriorityCount": 1
+    },
+    "filterOptions": {
+        "availableTypes": [
+            {"type": "MAINTENANCE", "count": 1},
+            {"type": "IMPORTANT_NOTICE", "count": 0}
+        ],
+        "availablePriorities": [
+            {"priority": "HIGH", "count": 1}
+        ]
+    },
+    "userStats": {
+        "totalViewedNotifications": 25,
+        "averageResponseTime": "2時間30分",
+        "bookmarkUsageRate": 15.5
+    }
+}
+```
+
+==== ブックマーク切り替えリクエスト
+
+```
+POST /api/notifications/12345/bookmark
+Authorization: Bearer {jwt-token}
+```
+
+==== ブックマーク切り替えレスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "notificationId": 12345,
+    "isBookmarked": true,
+    "bookmarkedAt": "2024-03-15T11:30:00"
+}
+```

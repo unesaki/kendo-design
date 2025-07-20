@@ -1,0 +1,288 @@
+= ログアウトAPI 詳細設計書
+
+== 概要
+
+logoutApi
+
+ログイン中のユーザーがシステムからログアウトするAPI。
+クライアント側でJWTトークンを破棄し、ログアウト処理を実行する。
+
+== Bean定義
+
+=== Dto定義
+
+==== LogoutResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|message
+|String
+|ログアウト完了メッセージ
+
+|loggedOutAt
+|LocalDateTime
+|ログアウト実行日時
+|===
+
+=== エラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|認証トークンが無効な場合
+|認証が必要です。
+|MSG_SYS_0008
+|401
+
+|2
+|認証トークンが期限切れの場合
+|認証トークンの有効期限が切れています。
+|MSG_SYS_0009
+|401
+
+|3
+|認証ヘッダーが存在しない場合
+|認証が必要です。
+|MSG_SYS_0008
+|401
+|===
+
+== Controller定義
+
+=== クラス名
+
+`AuthController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|authService
+|AuthService
+|認証処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/auth"), @RequiredArgsConstructor
+
+|メソッド
+|@PostMapping("/logout")
+
+|引数
+|@AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`logout`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<LogoutResponseDto>
+|ログアウト成功時に完了メッセージを返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|認証情報の確認
+|`@AuthenticationPrincipal` により、ログイン中のユーザー情報（UserDetails）を取得する。
+
+|2
+|ユーザーIDの取得
+|認証情報からユーザーIDを取得する。
+
+|3
+|サービス呼び出し
+|`authService.logout(userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `LogoutResponseDto` を `ResponseEntity.ok().body(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* 認証情報が取得できない場合は `MSG_SYS_0008` を返す  
+* トークンが無効または期限切れの場合は適切なメッセージIDを返す
+|===
+
+== Service定義
+
+=== インターフェース
+
+`AuthService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|logout
+|Long userId
+|LogoutResponseDto
+|ユーザーのログアウト処理を実行する。
+|===
+
+=== 実装クラス
+
+`AuthServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|userRepository
+|UserRepository
+|`@RequiredArgsConstructor` によりインジェクションされる（将来の拡張用）
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor
+|===
+
+=== パラメータ
+
+|===
+|名称 |型 |説明
+
+|userId
+|Long
+|ログアウト対象のユーザーID
+|===
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|LogoutResponseDto
+|ログアウト完了情報を含むDTO
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|ログアウト日時の記録
+|現在日時を `LocalDateTime.now()` で取得
+
+|2
+|レスポンス生成
+|LogoutResponseDto に以下の情報を設定して返却：  
+* message: "ログアウトしました。"  
+* loggedOutAt: 現在日時
+
+|–
+|将来の拡張検討
+|* トークンブラックリスト機能の追加  
+* ログアウト履歴の記録  
+* セッション管理機能の追加
+|===
+
+== セキュリティ仕様
+
+=== JWT無効化方針
+
+==== 現在の実装
+* **クライアント側での無効化**: フロントエンドでJWTトークンを削除
+* **サーバー側の処理**: ログアウト記録のみ（トークン自体は無効化しない）
+
+==== 将来の拡張検討
+* **トークンブラックリスト**: ログアウト時にトークンをブラックリストに追加
+* **リフレッシュトークン**: リフレッシュトークンがある場合は無効化
+* **セッション管理**: データベースでのセッション管理を追加
+
+=== フロントエンド連携
+
+|===
+|項目 |説明
+
+|トークン削除
+|localStorage または sessionStorage からトークンを削除
+
+|リダイレクト
+|ログアウト完了後、ログインページにリダイレクト
+
+|状態管理
+|アプリケーション状態からユーザー情報を削除
+
+|APIリクエスト
+|以降のAPIリクエストでは認証ヘッダーを送信しない
+|===
+
+=== セキュリティ考慮事項
+
+* ログアウト後のトークンは、有効期限まで技術的には使用可能
+* 機密性の高い操作では、必要に応じて追加の認証を要求
+* XSS攻撃対策として、適切なトークン保存方式を採用
+* CSRF攻撃対策として、SameSite Cookie設定を検討
+
+== 実装例
+
+=== フロントエンド（JavaScript）
+
+[source,javascript]
+----
+// ログアウトAPI呼び出し
+async function logout() {
+    try {
+        const response = await fetch('/api/auth/logout', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('accessToken')}`,
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (response.ok) {
+            // トークンを削除
+            localStorage.removeItem('accessToken');
+            
+            // ログインページにリダイレクト
+            window.location.href = '/login';
+        }
+    } catch (error) {
+        console.error('ログアウトエラー:', error);
+    }
+}
+----
+
+=== HTTP Header例
+
+==== リクエスト
+```
+POST /api/auth/logout
+Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+Content-Type: application/json
+```
+
+==== レスポンス
+```
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "message": "ログアウトしました。",
+    "loggedOutAt": "2024-01-15T10:30:00"
+}
+```

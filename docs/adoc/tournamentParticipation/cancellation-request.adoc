@@ -1,0 +1,640 @@
+= キャンセル申請API 詳細設計書
+
+== 概要
+
+requestCancellationApi
+
+チームエントリー後、出場辞退を希望する場合に主催者へキャンセル申請を送信するAPI。
+一方的な削除ではなく申請制とし、主催者の承認をもってキャンセル成立とする。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[大会参加管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== CancellationRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|entryId
+|Long
+|@NotNull
+|対象エントリーID
+
+|reason
+|String
+|@NotBlank, @Size(max=500)
+|キャンセル理由
+
+|urgentFlag
+|Boolean
+|
+|緊急対応フラグ（デフォルト：false）
+
+|contactInfo
+|String
+|@Size(max=200)
+|緊急時連絡先（緊急時のみ必須）
+
+|additionalComment
+|String
+|@Size(max=500)
+|追加コメント（任意）
+|===
+
+==== CancellationResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|changeRequestId
+|Long
+|作成されたキャンセル申請ID
+
+|entryId
+|Long
+|対象エントリーID
+
+|currentEntry
+|TournamentTeamEntryDto
+|現在のエントリー情報
+
+|cancellationPolicy
+|CancellationPolicyDto
+|キャンセルポリシー情報
+
+|estimatedProcessingTime
+|String
+|処理予定時間の目安
+
+|nextActions
+|List<String>
+|今後可能なアクション一覧
+
+|message
+|String
+|申請完了メッセージ
+|===
+
+==== CancellationPolicyDto
+
+|===
+|フィールド名 |型 |説明
+
+|canCancel
+|Boolean
+|キャンセル可能フラグ
+
+|penaltyInfo
+|String
+|ペナルティ情報
+
+|deadlineInfo
+|String
+|キャンセル可能期限情報
+
+|refundPolicy
+|String
+|参加費返金ポリシー
+
+|contactRequired
+|Boolean
+|主催者への直接連絡が必要かどうか
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|entryIdがnullの場合
+|エントリーIDは必須です。
+|MSG_SYS_0005
+|400
+
+|2
+|reasonが空の場合
+|キャンセル理由は必須です。
+|MSG_PTC_0028
+|400
+
+|3
+|reasonが500文字を超える場合
+|キャンセル理由は500文字以内で入力してください。
+|MSG_PTC_0029
+|400
+
+|4
+|urgentFlagがtrueでcontactInfoが空の場合
+|緊急時は連絡先の入力が必要です。
+|MSG_PTC_0030
+|400
+
+|5
+|contactInfoが200文字を超える場合
+|連絡先は200文字以内で入力してください。
+|MSG_PTC_0031
+|400
+
+|6
+|指定されたエントリーが存在しない場合
+|指定されたエントリーが見つかりません。
+|MSG_PTC_0009
+|404
+
+|7
+|キャンセル申請権限がない場合
+|このエントリーをキャンセルする権限がありません。
+|MSG_PTC_0032
+|403
+
+|8
+|キャンセルできない状態の場合
+|このエントリーはキャンセルできません。
+|MSG_PTC_0017
+|409
+
+|9
+|既にキャンセル申請済みの場合
+|既にキャンセル申請済みです。
+|MSG_PTC_0033
+|409
+
+|10
+|大会開催後のキャンセル申請の場合
+|大会開催後はキャンセルできません。
+|MSG_PTC_0007
+|403
+
+|11
+|キャンセル期限を過ぎている場合
+|キャンセル期限を過ぎています。
+|MSG_PTC_0034
+|403
+
+|12
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TournamentParticipationController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|participationService
+|TournamentParticipationService
+|大会参加処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/participation"), @RequiredArgsConstructor
+
+|メソッド（キャンセル申請）
+|@PostMapping("/entries/{entryId}/cancel")
+
+|メソッド（キャンセルポリシー取得）
+|@GetMapping("/entries/{entryId}/cancellation-policy")
+
+|引数
+|@PathVariable, @RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+* `requestCancellation` - キャンセル申請
+* `getCancellationPolicy` - キャンセルポリシー取得
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|requestCancellation
+|ResponseEntity<CancellationResponseDto>
+|申請成功時にキャンセル申請情報と次ステップを返却
+
+|getCancellationPolicy
+|ResponseEntity<CancellationPolicyDto>
+|キャンセル可能性とポリシー情報を返却
+|===
+
+=== 処理詳細
+
+==== requestCancellation
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|パスパラメータからエントリーID、リクエストボディからキャンセル情報を DTO（CancellationRequestDto）として受け取る。
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーの ID（userId）を取得する。
+
+|3
+|サービス呼び出し
+|`participationService.requestCancellation(entryId, requestDto, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `CancellationResponseDto` を `ResponseEntity.ok().body(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* バリデーションエラーが発生した場合は適切なメッセージIDを返す  
+* 権限エラーや業務ルールエラーの場合は適切なメッセージIDを返す
+|===
+
+==== getCancellationPolicy
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|パスパラメータからエントリーIDを取得。
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーの ID（userId）を取得する。
+
+|3
+|サービス呼び出し
+|`participationService.getCancellationPolicy(entryId, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `CancellationPolicyDto` を `ResponseEntity.ok().body(...)` にラップして返却する。
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TournamentParticipationService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|requestCancellation
+|Long entryId, CancellationRequestDto, Long userId
+|CancellationResponseDto
+|エントリーのキャンセルを申請する。
+
+|getCancellationPolicy
+|Long entryId, Long userId
+|CancellationPolicyDto
+|キャンセル可能性とポリシー情報を取得する。
+|===
+
+=== 実装クラス
+
+`TournamentParticipationServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentTeamEntryRepository
+|TournamentTeamEntryRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+
+|entryChangeRequestRepository
+|EntryChangeRequestRepository
+|変更申請管理に使用
+
+|tournamentRepository
+|TournamentRepository
+|大会情報取得に使用
+
+|participationPermissionService
+|ParticipationPermissionService
+|権限チェックに使用
+
+|participationNotificationService
+|ParticipationNotificationService
+|通知送信に使用
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== 処理詳細
+
+==== requestCancellation
+
+|===
+|順序 |概要 |詳細
+
+|1
+|エントリー情報取得・権限確認
+|* `tournamentTeamEntryRepository.findByIdWithDetails(entryId)` でエントリー詳細を取得  
+* 存在しない場合は `EntryNotFoundException` をスロー → `MSG_PTC_0009`  
+* `participationPermissionService.validateEditPermission(userId, entryId)` でキャンセル権限を確認
+
+|2
+|キャンセル可能性確認
+|==== 2-1. エントリー状態確認 ====  
+* エントリー状態がWITHDRAWNの場合は `AlreadyCancelledException` をスロー → `MSG_PTC_0033`  
+
+==== 2-2. 期限確認 ====  
+* 大会開催日が過ぎている場合は `EventDatePassedException` をスロー → `MSG_PTC_0007`  
+* キャンセル期限が設定されている場合は期限チェック → `MSG_PTC_0034`
+
+|3
+|重複申請確認
+|* `entryChangeRequestRepository.findPendingByTeamEntryId(entryId)` で未処理のキャンセル申請をチェック  
+* ChangeType.WITHDRAWAL の未処理申請が存在する場合は `PendingCancellationException` をスロー → `MSG_PTC_0033`
+
+|4
+|キャンセル申請エンティティ作成
+|* EntryChangeRequestEntity を生成し、以下の値をセット：  
+** teamEntryId: 対象エントリーID  
+** changeType: ChangeType.WITHDRAWAL  
+** requestData: キャンセル詳細情報をJSON形式で格納  
+** status: ChangeRequestStatus.PENDING  
+** reason: キャンセル理由  
+** requestedBy: 申請ユーザーID  
+** requestedAt: 現在日時
+
+|5
+|キャンセル申請の登録
+|* `entryChangeRequestRepository.insertChangeRequest(changeRequestEntity)` でキャンセル申請をDBに登録
+
+|6
+|緊急フラグ対応
+|* urgentFlag が true の場合：  
+** 主催者への緊急通知を送信  
+** システム管理者への通知も送信
+
+|7
+|通知送信
+|* `participationNotificationService.notifyChangeRequested(changeRequestEntity.id)` で主催者にキャンセル申請通知を送信  
+* 申請クラブには確認通知を送信
+
+|8
+|次アクション生成
+|申請後に実行可能なアクション一覧を生成：  
+* \"申請状況を確認する\"  
+* \"主催者に連絡する\"  
+* \"申請をキャンセルする\"（条件次第）
+
+|9
+|レスポンス生成
+|CancellationResponseDto に以下の情報を設定して返却：  
+* changeRequestId: 作成されたキャンセル申請ID  
+* entryId: 対象エントリーID  
+* currentEntry: 現在のエントリー情報  
+* cancellationPolicy: キャンセルポリシー情報  
+* estimatedProcessingTime: \"通常1-2営業日以内\"  
+* nextActions: 次アクション一覧  
+* message: \"キャンセル申請を送信しました。主催者の承認をお待ちください。\"
+
+|–
+|エラー処理
+|* トランザクション内でエラーが発生した場合はロールバック  
+* 各種例外をスローし、エラーメッセージを返す
+|===
+
+==== getCancellationPolicy
+
+|===
+|順序 |概要 |詳細
+
+|1
+|エントリー・大会情報取得
+|* `tournamentTeamEntryRepository.findByIdWithDetails(entryId)` でエントリー詳細を取得  
+* `tournamentRepository.findById(tournamentId)` で大会情報を取得
+
+|2
+|キャンセル可能性判定
+|==== 2-1. 基本条件チェック ====  
+* エントリー状態がWITHDRAWN以外  
+* 大会開催日が未来  
+* キャンセル期限内（設定されている場合）  
+
+==== 2-2. 追加条件チェック ====  
+* 未処理のキャンセル申請がない  
+* 大会ステータスが受付中または準備中
+
+|3
+|ペナルティ・ポリシー取得
+|* 大会設定からキャンセルポリシーを取得  
+* 参加費返金ポリシーを確認  
+* キャンセル期限とペナルティ情報を生成
+
+|4
+|レスポンス生成
+|CancellationPolicyDto に以下の情報を設定して返却：  
+* canCancel: キャンセル可能フラグ  
+* penaltyInfo: ペナルティ情報  
+* deadlineInfo: キャンセル可能期限情報  
+* refundPolicy: 参加費返金ポリシー  
+* contactRequired: 主催者への直接連絡が必要かどうか
+|===
+
+== Repository定義
+
+=== EntryChangeRequestRepository（追加メソッド）
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findPendingWithdrawalByTeamEntryId
+|Long teamEntryId
+|Optional<EntryChangeRequestDto>
+|未処理のキャンセル申請を取得
+
+|countPendingWithdrawalsByTournamentId
+|Long tournamentId
+|Integer
+|大会の未処理キャンセル申請数を取得
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 未処理キャンセル申請確認
+
+[source,sql]
+----
+SELECT COUNT(*) > 0
+FROM entry_change_requests
+WHERE team_entry_id = #{teamEntryId}
+  AND change_type = 'WITHDRAWAL'
+  AND status = 'PENDING'
+----
+
+==== キャンセル可能性判定
+
+[source,sql]
+----
+SELECT 
+    CASE 
+        WHEN te.status = 'WITHDRAWN' THEN false
+        WHEN t.event_date <= CURDATE() THEN false
+        WHEN t.cancellation_deadline IS NOT NULL 
+         AND t.cancellation_deadline < CURDATE() THEN false
+        WHEN EXISTS (
+            SELECT 1 FROM entry_change_requests ecr 
+            WHERE ecr.team_entry_id = te.id 
+              AND ecr.change_type = 'WITHDRAWAL' 
+              AND ecr.status = 'PENDING'
+        ) THEN false
+        ELSE true
+    END as can_cancel,
+    t.cancellation_policy,
+    t.refund_policy,
+    t.cancellation_deadline
+FROM tournament_team_entries te
+JOIN tournaments t ON te.tournament_id = t.id
+WHERE te.id = #{entryId}
+----
+
+== 業務ルール
+
+=== キャンセル申請ルール
+
+1. **申請可能状態**: WITHDRAWN以外のエントリーのみキャンセル申請可能
+2. **期限制限**: 大会開催日前、およびキャンセル期限内のみ申請可能
+3. **重複申請禁止**: 未処理のキャンセル申請がある場合は新規申請不可
+4. **承認制**: すべてのキャンセルは主催者の承認が必要
+
+=== キャンセルポリシー
+
+* **期限内キャンセル**: 通常は参加費の80%返金
+* **期限後キャンセル**: 参加費返金なし
+* **緊急キャンセル**: 個別対応（主催者判断）
+* **ペナルティ**: 繰り返しキャンセルには注意喚起
+
+=== 緊急対応ルール
+
+* **緊急フラグ**: 怪我、病気、災害等の緊急事態時に使用
+* **直接連絡**: 緊急時は電話連絡も併用推奨
+* **迅速処理**: 緊急申請は24時間以内の処理を目標
+
+== 通知機能
+
+=== キャンセル申請通知（主催者向け）
+
+キャンセル申請が提出された場合、以下の通知を主催者に送信：
+
+* **件名**: 「【剣道大会管理システム】参加キャンセル申請があります」
+* **内容**: 大会名、申請クラブ名、キャンセル理由、緊急フラグ、承認用リンク
+* **送信方法**: アプリ内通知 + メール通知 + （緊急時は電話連絡案内）
+
+=== 申請確認通知（申請者向け）
+
+キャンセル申請が受理された場合、以下の通知を申請者に送信：
+
+* **件名**: 「【剣道大会管理システム】キャンセル申請を受け付けました」
+* **内容**: 大会名、申請日時、処理予定、キャンセルポリシー、問い合わせ先
+* **送信方法**: アプリ内通知 + メール通知
+
+=== 処理完了通知
+
+キャンセル申請が処理された場合：
+
+* **承認時**: 「参加キャンセルが承認されました」+ 返金手続き案内
+* **拒否時**: 「参加キャンセルが拒否されました」+ 拒否理由 + 異議申し立て方法
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== キャンセル申請リクエスト
+
+```json
+POST /api/participation/entries/456/cancel
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "entryId": 456,
+    "reason": "主力選手の怪我により、団体戦に必要な人数が確保できないため",
+    "urgentFlag": true,
+    "contactInfo": "090-1234-5678（担当者：田中）",
+    "additionalComment": "大変申し訳ございませんが、よろしくお願いいたします。"
+}
+```
+
+==== キャンセル申請レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "changeRequestId": 890,
+    "entryId": 456,
+    "currentEntry": {
+        "id": 456,
+        "teamName": "大阪剣道クラブA",
+        "status": "PENDING",
+        "canEdit": false,
+        "canWithdraw": false
+    },
+    "cancellationPolicy": {
+        "canCancel": true,
+        "penaltyInfo": "期限内キャンセルのため、参加費の80%を返金いたします。",
+        "deadlineInfo": "キャンセル期限：2024-03-08まで",
+        "refundPolicy": "返金は承認後1週間以内に指定口座へ振り込みます。",
+        "contactRequired": true
+    },
+    "estimatedProcessingTime": "緊急申請のため24時間以内",
+    "nextActions": [
+        "申請状況を確認する",
+        "主催者に連絡する"
+    ],
+    "message": "キャンセル申請を送信しました。緊急申請として優先処理いたします。"
+}
+```
+
+==== キャンセルポリシー取得リクエスト
+
+```
+GET /api/participation/entries/456/cancellation-policy
+Authorization: Bearer {jwt-token}
+```
+
+==== キャンセルポリシー取得レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "canCancel": true,
+    "penaltyInfo": "期限内キャンセルのため、参加費の80%を返金いたします。",
+    "deadlineInfo": "キャンセル期限：2024-03-08まで（あと5日）",
+    "refundPolicy": "返金は承認後1週間以内に指定口座へ振り込みます。手数料はお客様負担となります。",
+    "contactRequired": false
+}
+```

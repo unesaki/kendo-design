@@ -1,0 +1,1118 @@
+= 大会ステータス管理API 詳細設計書
+
+== 概要
+
+tournamentStatusManagementApi
+
+大会主催者が大会の進行段階に応じてステータスを管理するAPI。
+エントリー受付開始から大会終了まで、各段階での状態遷移と制御を行う。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[大会主催管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== TournamentStatusUpdateRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|tournamentId
+|Long
+|@NotNull
+|大会ID
+
+|newStatus
+|TournamentStatus
+|@NotNull
+|新しいステータス
+
+|reason
+|String
+|@Size(max=500)
+|ステータス変更理由
+
+|scheduledTransitionTime
+|LocalDateTime
+|
+|予定されたステータス変更時刻
+
+|notifyParticipants
+|Boolean
+|
+|参加者への通知フラグ
+
+|customMessage
+|String
+|@Size(max=1000)
+|カスタム通知メッセージ
+
+|emergencyMode
+|Boolean
+|
+|緊急モードフラグ
+
+|adminOverride
+|Boolean
+|
+|管理者強制実行フラグ
+
+|transitionSettings
+|StatusTransitionSettingsDto
+|@Valid
+|遷移設定
+|===
+
+==== TournamentStatusUpdateResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|tournamentId
+|Long
+|大会ID
+
+|previousStatus
+|TournamentStatus
+|変更前ステータス
+
+|currentStatus
+|TournamentStatus
+|変更後ステータス
+
+|transitionResult
+|StatusTransitionResultDto
+|遷移結果
+
+|affectedEntries
+|List<AffectedEntryDto>
+|影響を受けるエントリー
+
+|scheduledActions
+|List<ScheduledActionDto>
+|予定されたアクション
+
+|notifications
+|List<NotificationDto>
+|送信予定通知
+
+|warnings
+|List<String>
+|警告メッセージ
+
+|nextAvailableStatuses
+|List<TournamentStatus>
+|次に遷移可能なステータス
+
+|canRevert
+|Boolean
+|元に戻すことが可能か
+
+|automaticTransitions
+|List<AutomaticTransitionDto>
+|自動遷移予定
+|===
+
+==== StatusTransitionSettingsDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|validatePrerequisites
+|Boolean
+|
+|前提条件をチェック
+
+|allowPartialCompletion
+|Boolean
+|
+|部分的完了を許可
+
+|gracePeriod
+|Integer
+|@Min(0), @Max(1440)
+|猶予期間（分）
+
+|autoPublishResults
+|Boolean
+|
+|結果自動公開
+
+|archiveData
+|Boolean
+|
+|データアーカイブ
+
+|generateReports
+|Boolean
+|
+|レポート生成
+
+|cleanupTempData
+|Boolean
+|
+|一時データクリーンアップ
+
+|sendNotifications
+|Boolean
+|
+|通知送信
+
+|updateStatistics
+|Boolean
+|
+|統計情報更新
+|===
+
+==== StatusTransitionResultDto
+
+|===
+|フィールド名 |型 |説明
+
+|isSuccessful
+|Boolean
+|遷移成功フラグ
+
+|transitionedAt
+|LocalDateTime
+|遷移実行時刻
+
+|executedActions
+|List<ExecutedActionDto>
+|実行されたアクション
+
+|skippedActions
+|List<SkippedActionDto>
+|スキップされたアクション
+
+|errors
+|List<TransitionErrorDto>
+|発生したエラー
+
+|warnings
+|List<String>
+|警告メッセージ
+
+|rollbackInfo
+|RollbackInfoDto
+|ロールバック情報
+
+|performance
+|TransitionPerformanceDto
+|実行パフォーマンス
+|===
+
+==== TournamentStatusQueryRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|tournamentId
+|Long
+|@NotNull
+|大会ID
+
+|includeHistory
+|Boolean
+|
+|履歴を含む
+
+|includeScheduledTransitions
+|Boolean
+|
+|予定遷移を含む
+
+|includeStatistics
+|Boolean
+|
+|統計情報を含む
+
+|includeValidation
+|Boolean
+|
+|検証情報を含む
+|===
+
+==== TournamentStatusQueryResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|tournament
+|TournamentBasicInfoDto
+|大会基本情報
+
+|currentStatus
+|TournamentStatusDetailDto
+|現在のステータス詳細
+
+|statusHistory
+|List<StatusHistoryDto>
+|ステータス履歴
+
+|scheduledTransitions
+|List<ScheduledTransitionDto>
+|予定されている遷移
+
+|validationResults
+|StatusValidationDto
+|現在のステータス検証結果
+
+|availableActions
+|List<AvailableActionDto>
+|実行可能なアクション
+
+|restrictions
+|List<StatusRestrictionDto>
+|制限事項
+
+|statistics
+|TournamentStatusStatisticsDto
+|ステータス関連統計
+|===
+
+=== Enum定義
+
+==== TournamentStatus
+
+|===
+|値 |説明 |前提条件 |次の可能ステータス
+
+|DRAFT
+|下書き
+|大会作成直後
+|ENTRY_OPEN, CANCELLED
+
+|ENTRY_OPEN
+|エントリー受付中
+|基本情報設定完了
+|ENTRY_CLOSED, CANCELLED
+
+|ENTRY_CLOSED
+|エントリー受付終了
+|エントリー締切
+|BRACKET_CREATED, CANCELLED
+
+|BRACKET_CREATED
+|トーナメント表作成済み
+|トーナメント表作成完了
+|IN_PROGRESS, CANCELLED
+
+|IN_PROGRESS
+|開催中
+|大会開始
+|COMPLETED, SUSPENDED, CANCELLED
+
+|SUSPENDED
+|中断
+|一時中断
+|IN_PROGRESS, CANCELLED, COMPLETED
+
+|COMPLETED
+|完了
+|全試合終了
+|ARCHIVED
+
+|CANCELLED
+|中止
+|いつでも可能
+|なし
+
+|ARCHIVED
+|アーカイブ済み
+|完了から一定期間経過
+|なし
+|===
+
+==== StatusTransitionType
+
+|===
+|値 |説明
+
+|MANUAL
+|手動遷移
+
+|AUTOMATIC
+|自動遷移
+
+|SCHEDULED
+|予定遷移
+
+|EMERGENCY
+|緊急遷移
+
+|SYSTEM
+|システム遷移
+|===
+
+==== TransitionValidationLevel
+
+|===
+|値 |説明
+
+|STRICT
+|厳格チェック
+
+|STANDARD
+|標準チェック
+
+|RELAXED
+|緩和チェック
+
+|EMERGENCY
+|緊急時チェック
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|tournamentIdがnullの場合
+|大会IDは必須です。
+|MSG_STATUS_0001
+|400
+
+|2
+|指定された大会が見つからない場合
+|指定された大会が見つかりません。
+|MSG_STATUS_0002
+|404
+
+|3
+|ステータス変更権限がない場合
+|ステータスを変更する権限がありません。
+|MSG_STATUS_0003
+|403
+
+|4
+|無効なステータス遷移の場合
+|現在のステータスからの遷移はできません。
+|MSG_STATUS_0004
+|400
+
+|5
+|前提条件が満たされていない場合
+|ステータス変更の前提条件が満たされていません。
+|MSG_STATUS_0005
+|400
+
+|6
+|進行中の処理がある場合
+|進行中の処理があるため変更できません。
+|MSG_STATUS_0006
+|409
+
+|7
+|緊急モードでない強制実行の場合
+|強制実行は緊急モードでのみ可能です。
+|MSG_STATUS_0007
+|403
+
+|8
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TournamentStatusController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentStatusService
+|TournamentStatusService
+|ステータス管理処理を行うサービス。`@RequiredArgsConstructor` によりインジェクション。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/tournaments/{tournamentId}/status"), @RequiredArgsConstructor
+
+|メソッド（ステータス取得）
+|@GetMapping
+
+|メソッド（ステータス更新）
+|@PutMapping
+
+|メソッド（自動遷移設定）
+|@PostMapping("/auto-transition")
+
+|メソッド（緊急停止）
+|@PostMapping("/emergency-stop")
+
+|引数
+|@PathVariable, @RequestBody, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+* `getTournamentStatus` - ステータス取得
+* `updateTournamentStatus` - ステータス更新
+* `scheduleAutoTransition` - 自動遷移設定
+* `emergencyStop` - 緊急停止
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|getTournamentStatus
+|ResponseEntity<TournamentStatusQueryResponseDto>
+|現在のステータス詳細を返却
+
+|updateTournamentStatus
+|ResponseEntity<TournamentStatusUpdateResponseDto>
+|更新結果を返却
+
+|scheduleAutoTransition
+|ResponseEntity<AutoTransitionResponseDto>
+|自動遷移設定結果を返却
+
+|emergencyStop
+|ResponseEntity<EmergencyStopResponseDto>
+|緊急停止結果を返却
+|===
+
+=== 処理詳細
+
+==== updateTournamentStatus
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領・認証
+|パスパラメータから大会ID、リクエストボディから更新設定を取得。
+ユーザー認証情報を取得。
+
+|2
+|権限確認
+|tournamentPermissionService.validateStatusChangePermission(tournamentId, userId) で変更権限を確認。
+
+|3
+|現在ステータス確認
+|tournamentStatusService.getCurrentStatus(tournamentId) で現在のステータスを取得。
+
+|4
+|遷移可能性検証
+|tournamentStatusService.validateTransition(currentStatus, newStatus) で遷移可能性を確認。
+
+|5
+|サービス呼び出し
+|tournamentStatusService.updateStatus(requestDto, userId) を呼び出す。
+
+|6
+|レスポンス生成
+|更新結果を含む TournamentStatusUpdateResponseDto を返却する。
+
+|–
+|エラー処理
+|* 大会が見つからない場合は MSG_STATUS_0002 を返却  
+* 変更権限がない場合は MSG_STATUS_0003 を返却  
+* 無効な遷移の場合は MSG_STATUS_0004 を返却  
+* 前提条件未満の場合は MSG_STATUS_0005 を返却
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TournamentStatusService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|updateStatus
+|TournamentStatusUpdateRequestDto, Long userId
+|TournamentStatusUpdateResponseDto
+|ステータスを更新し、関連処理を実行する
+
+|getCurrentStatus
+|Long tournamentId
+|TournamentStatusDetailDto
+|現在のステータス詳細を取得する
+
+|validateTransition
+|TournamentStatus current, TournamentStatus target
+|TransitionValidationDto
+|ステータス遷移の妥当性を検証する
+
+|getStatusHistory
+|Long tournamentId
+|List<StatusHistoryDto>
+|ステータス変更履歴を取得する
+
+|scheduleAutoTransition
+|Long tournamentId, TournamentStatus targetStatus, LocalDateTime when
+|AutoTransitionDto
+|自動遷移をスケジュールする
+
+|executeScheduledTransitions
+|
+|List<TransitionResultDto>
+|スケジュールされた遷移を実行する（バッチ処理）
+|===
+
+=== 実装クラス
+
+`TournamentStatusServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentStatusRepository
+|TournamentStatusRepository
+|ステータスデータ管理用リポジトリ
+
+|statusTransitionEngine
+|StatusTransitionEngine
+|状態遷移エンジン
+
+|statusValidationService
+|StatusValidationService
+|検証専用サービス
+
+|tournamentLifecycleService
+|TournamentLifecycleService
+|ライフサイクル管理サービス
+
+|notificationService
+|NotificationService
+|通知送信サービス
+
+|tournamentArchiveService
+|TournamentArchiveService
+|アーカイブ処理サービス
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== 処理詳細
+
+==== updateStatus
+
+|===
+|順序 |概要 |詳細
+
+|1
+|現在状態取得・検証
+|* tournamentStatusRepository.findCurrentStatus(tournamentId) で現在状態を取得  
+* 状態が見つからない場合は `TournamentNotFoundException` をスロー → `MSG_STATUS_0002`
+
+|2
+|遷移妥当性検証
+|* validateTransition(currentStatus, newStatus) で遷移妥当性をチェック：  
+** 許可された遷移パターンか確認  
+** 前提条件（エントリー数、トーナメント表作成等）をチェック  
+** 進行中の処理がないか確認  
+* 検証失敗時は適切な例外をスロー
+
+|3
+|事前処理実行
+|* ステータス遷移前の必要な処理を実行：  
+** ENTRY_CLOSED: エントリー受付終了処理  
+** BRACKET_CREATED: トーナメント表検証  
+** IN_PROGRESS: 開始時初期化処理  
+** COMPLETED: 終了時処理  
+** CANCELLED: キャンセル処理
+
+|4
+|ステータス更新
+|* tournamentStatusRepository.updateStatus() でステータスを更新  
+* 更新履歴をstatusHistoryに記録
+
+|5
+|関連データ更新
+|* ステータスに応じた関連データの更新：  
+** エントリー状態の更新  
+** トーナメント表の公開状態変更  
+** 統計情報の更新
+
+|6
+|事後処理実行
+|* ステータス遷移後の処理を実行：  
+** 通知送信  
+** アーカイブ処理（COMPLETED → ARCHIVED）  
+** レポート生成  
+** 一時データクリーンアップ
+
+|7
+|自動遷移設定
+|* 必要に応じて次の自動遷移をスケジュール：  
+** ENTRY_OPEN → ENTRY_CLOSED（締切日時）  
+** IN_PROGRESS → COMPLETED（予想終了時刻）
+
+|8
+|通知処理
+|* 関係者への通知を送信：  
+** 参加クラブへのステータス変更通知  
+** 観戦者への更新通知  
+** 運営スタッフへの作業指示
+
+|9
+|レスポンス生成
+|TournamentStatusUpdateResponseDto に以下の情報を設定して返却：  
+* tournamentId: 大会ID  
+* previousStatus, currentStatus: 変更前後ステータス  
+* transitionResult: 遷移結果詳細  
+* affectedEntries: 影響を受けるエントリー  
+* scheduledActions: 予定されたアクション  
+* notifications: 送信予定通知  
+* warnings: 警告メッセージ  
+* nextAvailableStatuses: 次に遷移可能なステータス
+
+|–
+|エラー処理
+|* 各種例外をスローし、適切なエラーメッセージを返す  
+* トランザクション失敗時はロールバック実行  
+* 部分的な処理失敗は警告として記録し、可能な部分は継続
+|===
+
+== StatusTransitionEngine定義
+
+ステータス遷移の制御を行う専用エンジン
+
+=== メソッド定義
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|validateTransition
+|TournamentStatus from, TournamentStatus to, ValidationContext
+|ValidationResult
+|遷移の妥当性を検証
+
+|executeTransition
+|TransitionRequest
+|TransitionResult
+|ステータス遷移を実行
+
+|getAvailableTransitions
+|TournamentStatus current, ValidationContext
+|List<TournamentStatus>
+|現在ステータスから遷移可能なステータス一覧
+
+|calculatePrerequisites
+|TournamentStatus target, Long tournamentId
+|PrerequisiteResult
+|目標ステータスへの前提条件を計算
+
+|simulateTransition
+|TransitionRequest
+|SimulationResult
+|遷移のシミュレーションを実行
+|===
+
+=== 状態遷移マトリックス
+
+```java
+private static final Map<TournamentStatus, Set<TournamentStatus>> TRANSITION_MATRIX = Map.of(
+    TournamentStatus.DRAFT, Set.of(
+        TournamentStatus.ENTRY_OPEN, 
+        TournamentStatus.CANCELLED
+    ),
+    TournamentStatus.ENTRY_OPEN, Set.of(
+        TournamentStatus.ENTRY_CLOSED, 
+        TournamentStatus.CANCELLED
+    ),
+    TournamentStatus.ENTRY_CLOSED, Set.of(
+        TournamentStatus.BRACKET_CREATED, 
+        TournamentStatus.CANCELLED
+    ),
+    TournamentStatus.BRACKET_CREATED, Set.of(
+        TournamentStatus.IN_PROGRESS, 
+        TournamentStatus.CANCELLED
+    ),
+    TournamentStatus.IN_PROGRESS, Set.of(
+        TournamentStatus.COMPLETED, 
+        TournamentStatus.SUSPENDED, 
+        TournamentStatus.CANCELLED
+    ),
+    TournamentStatus.SUSPENDED, Set.of(
+        TournamentStatus.IN_PROGRESS, 
+        TournamentStatus.CANCELLED, 
+        TournamentStatus.COMPLETED
+    ),
+    TournamentStatus.COMPLETED, Set.of(
+        TournamentStatus.ARCHIVED
+    ),
+    TournamentStatus.CANCELLED, Set.of(),
+    TournamentStatus.ARCHIVED, Set.of()
+);
+```
+
+== Repository定義
+
+=== 使用メソッド
+
+==== TournamentStatusRepository（拡張）
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|updateStatus
+|Long tournamentId, TournamentStatus status, Long userId
+|void
+|ステータスを更新
+
+|saveStatusHistory
+|StatusHistoryEntity
+|StatusHistoryEntity
+|ステータス履歴を保存
+
+|findCurrentStatus
+|Long tournamentId
+|Optional<TournamentStatusEntity>
+|現在のステータスを取得
+
+|findStatusHistory
+|Long tournamentId
+|List<StatusHistoryEntity>
+|ステータス履歴を取得
+
+|scheduleAutoTransition
+|AutoTransitionEntity
+|AutoTransitionEntity
+|自動遷移をスケジュール
+
+|findScheduledTransitions
+|LocalDateTime before
+|List<AutoTransitionEntity>
+|実行予定の自動遷移を取得
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== ステータス更新
+
+[source,sql]
+----
+UPDATE tournaments 
+SET 
+    status = #{status},
+    status_changed_at = NOW(),
+    status_changed_by = #{userId},
+    updated_at = NOW()
+WHERE id = #{tournamentId}
+----
+
+==== ステータス履歴保存
+
+[source,sql]
+----
+INSERT INTO tournament_status_history (
+    tournament_id,
+    previous_status,
+    new_status,
+    transition_type,
+    reason,
+    changed_by,
+    changed_at,
+    created_at
+) VALUES (
+    #{tournamentId},
+    #{previousStatus},
+    #{newStatus},
+    #{transitionType},
+    #{reason},
+    #{changedBy},
+    #{changedAt},
+    NOW()
+)
+----
+
+==== 前提条件チェック
+
+[source,sql]
+----
+SELECT 
+    t.id,
+    t.status,
+    COUNT(DISTINCT te.id) as entry_count,
+    COUNT(DISTINCT b.id) as bracket_count,
+    COUNT(DISTINCT mr.id) as completed_matches,
+    COUNT(DISTINCT bm.id) as total_matches,
+    CASE 
+        WHEN COUNT(DISTINCT mr.id) = COUNT(DISTINCT bm.id) AND COUNT(DISTINCT bm.id) > 0 
+        THEN true ELSE false 
+    END as all_matches_completed
+FROM tournaments t
+LEFT JOIN tournament_team_entries te ON t.id = te.tournament_id AND te.status = 'APPROVED'
+LEFT JOIN tournament_brackets b ON t.id = b.tournament_id
+LEFT JOIN bracket_matches bm ON b.id = bm.bracket_id
+LEFT JOIN match_results mr ON bm.id = mr.bracket_id
+WHERE t.id = #{tournamentId}
+GROUP BY t.id, t.status
+----
+
+==== 自動遷移実行対象取得
+
+[source,sql]
+----
+SELECT 
+    at.id,
+    at.tournament_id,
+    at.target_status,
+    at.scheduled_at,
+    t.current_status
+FROM auto_transitions at
+JOIN tournaments t ON at.tournament_id = t.id
+WHERE at.scheduled_at <= #{executionTime}
+  AND at.executed = false
+  AND at.cancelled = false
+ORDER BY at.scheduled_at ASC
+----
+
+== 業務ルール
+
+=== ステータス遷移ルール
+
+1. **順次遷移**: 基本的に順番通りの遷移のみ許可
+2. **スキップ可能**: 緊急時は一部ステータスをスキップ可能
+3. **不可逆遷移**: COMPLETED, ARCHIVED, CANCELLEDは基本的に不可逆
+4. **権限制御**: 各遷移に必要な権限レベルを設定
+5. **前提条件**: 各ステータスへの遷移に必要な条件を定義
+
+=== 自動遷移ルール
+
+* **エントリー締切**: 設定された締切日時に自動でENTRY_CLOSED
+* **大会開始**: 設定された開始日時に自動でIN_PROGRESS
+* **アーカイブ**: 完了から30日後に自動でARCHIVED
+* **緊急停止**: システム異常時の自動SUSPENDED
+
+=== 通知ルール
+
+* **ステータス変更**: 全参加者に通知
+* **重要遷移**: IN_PROGRESS, COMPLETED, CANCELLEDは即座に通知
+* **カスタムメッセージ**: 主催者からのメッセージを含める
+* **多言語対応**: 参加者の言語設定に応じた通知
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== ステータス更新リクエスト
+
+```
+PUT /api/tournaments/123/status
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "tournamentId": 123,
+    "newStatus": "IN_PROGRESS",
+    "reason": "大会開始時刻になりました",
+    "notifyParticipants": true,
+    "customMessage": "第30回全日本剣道選手権大会を開始します。参加者の皆様は準備をお願いします。",
+    "transitionSettings": {
+        "validatePrerequisites": true,
+        "allowPartialCompletion": false,
+        "gracePeriod": 10,
+        "autoPublishResults": true,
+        "sendNotifications": true,
+        "updateStatistics": true
+    }
+}
+```
+
+==== ステータス更新レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "tournamentId": 123,
+    "previousStatus": "BRACKET_CREATED",
+    "currentStatus": "IN_PROGRESS",
+    "transitionResult": {
+        "isSuccessful": true,
+        "transitionedAt": "2024-03-15T09:00:00",
+        "executedActions": [
+            {
+                "action": "INITIALIZE_TOURNAMENT",
+                "status": "COMPLETED",
+                "duration": "2.3秒"
+            },
+            {
+                "action": "PUBLISH_BRACKET",
+                "status": "COMPLETED", 
+                "duration": "1.1秒"
+            },
+            {
+                "action": "SEND_NOTIFICATIONS",
+                "status": "COMPLETED",
+                "duration": "3.7秒"
+            }
+        ],
+        "skippedActions": [],
+        "errors": [],
+        "warnings": [
+            "一部の参加者への通知送信に時間がかかっています"
+        ]
+    },
+    "affectedEntries": [
+        {
+            "entryId": 456,
+            "entryName": "東京剣道クラブA",
+            "newStatus": "READY_TO_COMPETE",
+            "nextMatch": {
+                "matchId": 1001,
+                "scheduledTime": "2024-03-15T09:30:00",
+                "opponent": "大阪剣道クラブB"
+            }
+        }
+    ],
+    "scheduledActions": [
+        {
+            "action": "AUTO_PROGRESS_CHECK",
+            "scheduledAt": "2024-03-15T12:00:00",
+            "description": "進行状況の自動チェック"
+        }
+    ],
+    "notifications": [
+        {
+            "type": "STATUS_CHANGE",
+            "recipients": ["all_participants"],
+            "message": "大会が開始されました。第30回全日本剣道選手権大会を開始します。参加者の皆様は準備をお願いします。",
+            "sentAt": "2024-03-15T09:00:30",
+            "deliveryStatus": "SENT"
+        }
+    ],
+    "warnings": [],
+    "nextAvailableStatuses": [
+        "COMPLETED",
+        "SUSPENDED",
+        "CANCELLED"
+    ],
+    "canRevert": false,
+    "automaticTransitions": [
+        {
+            "targetStatus": "COMPLETED",
+            "condition": "ALL_MATCHES_COMPLETED",
+            "estimatedTime": "2024-03-15T17:00:00"
+        }
+    ]
+}
+```
+
+==== ステータス取得リクエスト
+
+```
+GET /api/tournaments/123/status?includeHistory=true&includeScheduledTransitions=true
+Authorization: Bearer {jwt-token}
+```
+
+==== ステータス取得レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "tournament": {
+        "id": 123,
+        "name": "第30回 全日本剣道選手権大会",
+        "hostClubName": "東京剣道連盟",
+        "eventDate": "2024-03-15"
+    },
+    "currentStatus": {
+        "status": "IN_PROGRESS",
+        "changedAt": "2024-03-15T09:00:00",
+        "changedBy": "大会運営者A",
+        "duration": "2時間30分",
+        "progress": {
+            "completedMatches": 8,
+            "totalMatches": 15,
+            "percentage": 53
+        }
+    },
+    "statusHistory": [
+        {
+            "previousStatus": null,
+            "newStatus": "DRAFT",
+            "changedAt": "2024-01-15T10:00:00",
+            "changedBy": "主催者",
+            "reason": "大会作成"
+        },
+        {
+            "previousStatus": "DRAFT",
+            "newStatus": "ENTRY_OPEN", 
+            "changedAt": "2024-01-20T09:00:00",
+            "changedBy": "主催者",
+            "reason": "エントリー受付開始"
+        }
+    ],
+    "scheduledTransitions": [
+        {
+            "targetStatus": "COMPLETED",
+            "scheduledAt": "2024-03-15T17:00:00",
+            "condition": "ALL_MATCHES_COMPLETED",
+            "isAutomatic": true
+        }
+    ],
+    "validationResults": {
+        "canTransitionTo": {
+            "COMPLETED": {
+                "possible": false,
+                "reason": "まだ試合が残っています",
+                "missingRequirements": ["7試合の完了"]
+            },
+            "SUSPENDED": {
+                "possible": true,
+                "reason": "いつでも中断可能"
+            }
+        }
+    },
+    "availableActions": [
+        {
+            "action": "SUSPEND_TOURNAMENT",
+            "label": "大会を一時中断",
+            "requiresConfirmation": true
+        },
+        {
+            "action": "EMERGENCY_STOP",
+            "label": "緊急停止",
+            "requiresAdminRole": true
+        }
+    ],
+    "statistics": {
+        "totalDuration": "2時間30分",
+        "averageMatchDuration": "18分",
+        "statusChangeCount": 4,
+        "participantNotificationsSent": 156
+    }
+}
+```
+
+==== 緊急停止リクエスト
+
+```
+POST /api/tournaments/123/status/emergency-stop
+Authorization: Bearer {jwt-token}
+```

@@ -1,0 +1,343 @@
+= クラブ切り替えAPI 詳細設計書
+
+== 概要
+
+switchCurrentClubApi
+
+ユーザーが所属する複数のクラブの中から、現在操作対象とするクラブを切り替えるAPI。
+選択されたクラブは後続のクラブ関連操作の対象となる。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[クラブ管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== SwitchClubRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|clubId
+|Long
+|@NotNull
+|切り替え先のクラブID
+|===
+
+==== SwitchClubResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|currentClub
+|ClubDto
+|切り替え後の現在クラブ情報
+
+|userClubs
+|List<ClubDto>
+|ユーザーが所属する全クラブ一覧
+
+|message
+|String
+|切り替え完了メッセージ
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|clubIdがnullの場合
+|クラブIDは必須です。
+|MSG_SYS_0005
+|400
+
+|2
+|指定されたクラブが存在しない場合
+|指定されたクラブが見つかりません。
+|MSG_CLB_0006
+|404
+
+|3
+|指定されたクラブのメンバーでない場合
+|このクラブのメンバーではありません。
+|MSG_CLB_0004
+|403
+|===
+
+== Controller定義
+
+=== クラス名
+
+`ClubController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|clubService
+|ClubService
+|クラブ管理処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/clubs"), @RequiredArgsConstructor
+
+|メソッド
+|@PutMapping("/current")
+
+|引数
+|@RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`switchCurrentClub`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<SwitchClubResponseDto>
+|切り替え成功時にクラブ情報を返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|クライアントから送信されたクラブIDを DTO（SwitchClubRequestDto）として受け取る。
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーの ID（userId）を取得する。
+
+|3
+|サービス呼び出し
+|`clubService.switchCurrentClub(requestDto, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `SwitchClubResponseDto` を `ResponseEntity.ok().body(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* バリデーションエラーが発生した場合は適切なメッセージIDを返す  
+* 権限エラーの場合は `MSG_CLB_0004` を返す
+|===
+
+== Service定義
+
+=== インターフェース
+
+`ClubService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|switchCurrentClub
+|SwitchClubRequestDto, Long userId
+|SwitchClubResponseDto
+|ユーザーの現在クラブを切り替える。
+|===
+
+=== 実装クラス
+
+`ClubServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|clubRepository
+|ClubRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+
+|clubMemberRepository
+|ClubMemberRepository
+|メンバーシップ確認に使用
+
+|userPreferenceRepository
+|UserPreferenceRepository
+|ユーザー設定管理に使用
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|クラブ存在確認
+|* `clubRepository.findById(clubId)` でクラブの存在を確認  
+* 存在しない場合は `ClubNotFoundException` をスロー → `MSG_CLB_0006`
+
+|2
+|メンバーシップ確認
+|* `clubMemberRepository.findByUserIdAndClubId(userId, clubId)` でメンバーシップを確認  
+* メンバーでない場合は `NotMemberException` をスロー → `MSG_CLB_0004`
+
+|3
+|現在クラブ設定の更新
+|* `userPreferenceRepository.updateCurrentClub(userId, clubId)` で現在クラブを更新  
+* 設定が存在しない場合は新規作成
+
+|4
+|ユーザーの全クラブ取得
+|* `clubRepository.getClubsByUserId(userId)` でユーザーが所属する全クラブを取得  
+* 各クラブの現在ユーザーのロール情報も含める
+
+|5
+|レスポンス生成
+|SwitchClubResponseDto に以下の情報を設定して返却：  
+* currentClub: 切り替え後の現在クラブ情報  
+* userClubs: ユーザーが所属する全クラブ一覧  
+* message: "クラブを切り替えました。"
+
+|–
+|エラー処理
+|* 各種例外をスローし、エラーメッセージを返す
+|===
+
+== Repository定義
+
+=== UserPreferenceRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|updateCurrentClub
+|Long userId, Long clubId
+|void
+|ユーザーの現在クラブ設定を更新
+
+|getCurrentClub
+|Long userId
+|Optional<Long>
+|ユーザーの現在クラブIDを取得
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 現在クラブ設定更新
+
+[source,sql]
+----
+INSERT INTO user_preferences (user_id, current_club_id, updated_at)
+VALUES (#{userId}, #{clubId}, NOW())
+ON DUPLICATE KEY UPDATE
+    current_club_id = #{clubId},
+    updated_at = NOW()
+----
+
+==== ユーザーの所属クラブ一覧取得
+
+[source,sql]
+----
+SELECT 
+    c.id,
+    c.name,
+    c.created_by,
+    c.created_at,
+    cm.role as current_user_role,
+    COUNT(cm2.user_id) as member_count,
+    CASE WHEN up.current_club_id = c.id THEN true ELSE false END as is_current
+FROM clubs c
+JOIN club_members cm ON c.id = cm.club_id AND cm.user_id = #{userId}
+LEFT JOIN club_members cm2 ON c.id = cm2.club_id
+LEFT JOIN user_preferences up ON up.user_id = #{userId}
+GROUP BY c.id, c.name, c.created_by, c.created_at, cm.role, up.current_club_id
+ORDER BY is_current DESC, c.name ASC
+----
+
+== フロントエンド連携
+
+=== クラブ切り替えUI
+
+* **ドロップダウン形式**: ヘッダーにクラブ選択ドロップダウンを配置
+* **現在クラブ表示**: 選択中のクラブ名を明確に表示
+* **ロール表示**: 各クラブでのユーザーの権限（管理者/メンバー）を表示
+
+=== 状態管理
+
+* **グローバル状態**: アプリケーション全体で現在クラブ情報を管理
+* **ローカルストレージ**: ブラウザリロード時の状態復元用
+* **自動切り替え**: 初回ログイン時は最後に使用したクラブを自動選択
+
+== セキュリティ考慮事項
+
+* **メンバーシップ検証**: 必ず所属確認を実行
+* **権限チェック**: 後続操作で適切な権限確認を実施
+* **不正切り替え防止**: 非メンバークラブへの切り替えを阻止
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== リクエスト
+```json
+PUT /api/clubs/current
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "clubId": 2
+}
+```
+
+==== レスポンス
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "currentClub": {
+        "id": 2,
+        "name": "大阪剣道クラブ",
+        "createdBy": 456,
+        "memberCount": 8,
+        "currentUserRole": "MEMBER",
+        "createdAt": "2024-01-10T09:00:00"
+    },
+    "userClubs": [
+        {
+            "id": 2,
+            "name": "大阪剣道クラブ",
+            "currentUserRole": "MEMBER",
+            "memberCount": 8,
+            "isCurrent": true
+        },
+        {
+            "id": 1,
+            "name": "東京剣道クラブ",
+            "currentUserRole": "ADMIN",
+            "memberCount": 5,
+            "isCurrent": false
+        }
+    ],
+    "message": "クラブを切り替えました。"
+}
+```

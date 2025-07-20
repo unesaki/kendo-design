@@ -1,0 +1,516 @@
+= 大会作成API 詳細設計書
+
+== 概要
+
+createTournamentApi
+
+クラブ管理者が自クラブ主催の新しい大会を作成するAPI。
+大会の基本情報を設定し、初期状態（DRAFT）で登録する。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[大会主催管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== CreateTournamentRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|name
+|String
+|@NotBlank, @Size(max=100)
+|大会名
+
+|eventDate
+|LocalDate
+|@NotNull, @Future
+|開催日（本日以降）
+
+|entryDeadline
+|LocalDate
+|@NotNull
+|エントリー締切日
+
+|tournamentType
+|TournamentType
+|@NotNull
+|大会種別（INDIVIDUAL/TEAM）
+
+|maxParticipants
+|Integer
+|@Min(2), @Max(128)
+|参加上限数（任意）
+
+|publicScope
+|PublicScope
+|@NotNull
+|公開範囲（PUBLIC/CLUB_ONLY/REGIONAL）
+
+|description
+|String
+|@Size(max=1000)
+|大会説明（任意）
+
+|rules
+|String
+|@Size(max=2000)
+|大会ルール（任意）
+
+|venue
+|String
+|@Size(max=200)
+|開催場所（任意）
+|===
+
+==== CreateTournamentResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|tournament
+|TournamentDto
+|作成された大会情報
+
+|message
+|String
+|作成完了メッセージ
+
+|nextActions
+|List<String>
+|次に実行可能なアクション一覧
+|===
+
+=== カスタムバリデーション
+
+==== @ValidEntryDeadline
+
+エントリー締切日が開催日以前であることを検証するカスタムバリデーション
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Constraint(validatedBy = EntryDeadlineValidator.class)
+public @interface ValidEntryDeadline {
+    String message() default "エントリー締切日は開催日以前の日付を入力してください。";
+    Class<?>[] groups() default {};
+    Class<? extends Payload>[] payload() default {};
+}
+```
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|nameが空の場合
+|大会名は必須です。
+|MSG_TRN_0001
+|400
+
+|2
+|nameが100文字を超える場合
+|大会名は100文字以内で入力してください。
+|MSG_TRN_0002
+|400
+
+|3
+|eventDateがnullの場合
+|開催日は必須です。
+|MSG_TRN_0003
+|400
+
+|4
+|eventDateが過去日の場合
+|開催日は本日以降の日付を入力してください。
+|MSG_TRN_0004
+|400
+
+|5
+|entryDeadlineがnullの場合
+|エントリー締切日は必須です。
+|MSG_TRN_0005
+|400
+
+|6
+|entryDeadlineが開催日より後の場合
+|エントリー締切日は開催日以前の日付を入力してください。
+|MSG_TRN_0006
+|400
+
+|7
+|maxParticipantsが範囲外の場合
+|参加上限数は2～128の範囲で入力してください。
+|MSG_TRN_0007
+|400
+
+|8
+|クラブ管理者権限がない場合
+|この操作にはクラブ管理者権限が必要です。
+|MSG_TRN_0008
+|403
+
+|9
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TournamentController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentService
+|TournamentService
+|大会管理処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/tournaments"), @RequiredArgsConstructor
+
+|メソッド
+|@PostMapping
+
+|引数
+|@RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+`createTournament`
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|ResponseEntity<CreateTournamentResponseDto>
+|作成成功時に大会情報と次アクション一覧を返却
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|クライアントから送信された大会情報を DTO（CreateTournamentRequestDto）として受け取る。
+
+|2
+|ユーザーIDと現在クラブIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーの ID（userId）と現在選択中のクラブID（currentClubId）を取得する。
+
+|3
+|サービス呼び出し
+|`tournamentService.createTournament(requestDto, userId, currentClubId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `CreateTournamentResponseDto` を `ResponseEntity.status(HttpStatus.CREATED).body(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* バリデーションエラーが発生した場合は適切なメッセージIDを返す  
+* 権限エラーの場合は `MSG_TRN_0008` を返す  
+* システムエラー時は `MSG_SYS_0003` を返す
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TournamentService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|createTournament
+|CreateTournamentRequestDto, Long userId, Long hostClubId
+|CreateTournamentResponseDto
+|新しい大会を作成し、初期状態で登録する。
+|===
+
+=== 実装クラス
+
+`TournamentServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentRepository
+|TournamentRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+
+|clubPermissionService
+|ClubPermissionService
+|クラブ権限チェックに使用
+
+|tournamentNotificationService
+|TournamentNotificationService
+|通知送信に使用（将来拡張用）
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== パラメータ
+
+|===
+|名称 |型 |説明
+
+|requestDto
+|CreateTournamentRequestDto
+|大会作成リクエスト情報
+
+|userId
+|Long
+|作成ユーザーID（認証済み）
+
+|hostClubId
+|Long
+|主催クラブID（現在選択中）
+|===
+
+=== 戻り値
+
+|===
+|戻り値型 |説明
+
+|CreateTournamentResponseDto
+|作成された大会情報と次アクション情報を含むDTO
+|===
+
+=== 処理詳細
+
+|===
+|順序 |概要 |詳細
+
+|1
+|クラブ管理者権限確認
+|* `clubPermissionService.validateClubAdminPermission(userId, hostClubId)` でクラブ管理者権限を確認  
+* 権限がない場合は `InsufficientPermissionException` をスロー → `MSG_TRN_0008`
+
+|2
+|エントリー締切日の自動調整（任意）
+|* entryDeadline が null の場合、開催日の7日前を自動設定  
+* ただし、今日より過去になる場合は明日に設定
+
+|3
+|大会エンティティ作成
+|* TournamentEntity を生成し、以下の値をセット：  
+** name: リクエストの大会名  
+** hostClubId: 主催クラブID  
+** eventDate: 開催日  
+** entryDeadline: エントリー締切日  
+** tournamentType: 大会種別  
+** maxParticipants: 参加上限数  
+** publicScope: 公開範囲  
+** status: TournamentStatus.DRAFT（初期状態）  
+** description: 大会説明  
+** rules: 大会ルール  
+** venue: 開催場所  
+** createdBy: 作成ユーザーID  
+** createdAt, updatedAt: 現在日時
+
+|4
+|大会登録
+|* `tournamentRepository.insertTournament(tournamentEntity)` で大会をDBに登録  
+* 自動採番されたIDが `tournamentEntity.id` に格納される  
+* 登録失敗時は `RuntimeException` をスロー → `MSG_SYS_0003`
+
+|5
+|次アクション一覧生成
+|作成された大会の状態に応じて、次に実行可能なアクション一覧を生成：  
+* "大会情報を編集する"  
+* "エントリー受付を開始する"  
+* "大会を削除する"
+
+|6
+|レスポンス生成
+|CreateTournamentResponseDto に以下の情報を設定して返却：  
+* tournament: 作成された大会情報（TournamentDto）  
+* message: "大会が作成されました。"  
+* nextActions: 次アクション一覧
+
+|–
+|エラー処理
+|* トランザクション内でエラーが発生した場合はロールバック  
+* 各種例外をスローし、エラーメッセージを返す
+|===
+
+== Repository定義
+
+=== TournamentRepository（追加メソッド）
+
+共通定義に加えて、以下のメソッドを使用：
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|insertTournament
+|TournamentEntity
+|void
+|大会を `tournaments` テーブルに登録
+
+|existsByNameAndHostClubId
+|String name, Long hostClubId
+|Boolean
+|同一クラブ・同一名の大会存在確認
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 大会登録
+
+[source,sql]
+----
+INSERT INTO tournaments (
+    name, host_club_id, event_date, entry_deadline, tournament_type,
+    max_participants, public_scope, status, description, rules, venue,
+    created_by, created_at, updated_at
+) VALUES (
+    #{name}, #{hostClubId}, #{eventDate}, #{entryDeadline}, #{tournamentType},
+    #{maxParticipants}, #{publicScope}, #{status}, #{description}, #{rules}, #{venue},
+    #{createdBy}, #{createdAt}, #{updatedAt}
+)
+----
+
+==== 重複チェック
+
+[source,sql]
+----
+SELECT COUNT(*) > 0
+FROM tournaments
+WHERE name = #{name}
+  AND host_club_id = #{hostClubId}
+  AND status != 'CANCELLED'
+----
+
+== 業務ルール
+
+=== 大会作成ルール
+
+1. **権限制限**: クラブ管理者のみ大会作成可能
+2. **名前重複**: 同一クラブ内での同名大会は作成不可（中止済み除く）
+3. **日付制約**: 開催日は本日以降、締切日は開催日以前
+4. **初期状態**: 作成時は必ずDRAFT状態で開始
+
+=== 自動設定ルール
+
+* **締切日未設定時**: 開催日の7日前を自動設定（ただし今日より過去の場合は明日）
+* **公開範囲未設定時**: PUBLIC（全体公開）を自動設定
+* **参加上限未設定時**: 制限なし（nullのまま）
+
+== 将来拡張機能
+
+=== テンプレート機能（TODO）
+
+* 過去の大会情報をテンプレートとして保存
+* テンプレートから新規大会を作成
+* よく使用する設定の雛形化
+
+=== 連携機能（TODO）
+
+* 外部カレンダーサービスとの連携
+* 会場予約システムとの連携
+* 審判手配システムとの連携
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== リクエスト
+```json
+POST /api/tournaments
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "name": "第15回 東京剣道クラブ杯",
+    "eventDate": "2024-03-15",
+    "entryDeadline": "2024-03-08",
+    "tournamentType": "TEAM",
+    "maxParticipants": 32,
+    "publicScope": "PUBLIC",
+    "description": "春の団体戦大会です。初心者も歓迎します。",
+    "rules": "全日本剣道連盟ルールに準拠。試合時間は3分間。",
+    "venue": "東京体育館 第1競技場"
+}
+```
+
+==== レスポンス
+```json
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{
+    "tournament": {
+        "id": 123,
+        "name": "第15回 東京剣道クラブ杯",
+        "hostClubId": 1,
+        "hostClubName": "東京剣道クラブ",
+        "eventDate": "2024-03-15",
+        "entryDeadline": "2024-03-08",
+        "tournamentType": "TEAM",
+        "maxParticipants": 32,
+        "currentParticipants": 0,
+        "publicScope": "PUBLIC",
+        "status": "DRAFT",
+        "description": "春の団体戦大会です。初心者も歓迎します。",
+        "venue": "東京体育館 第1競技場",
+        "canEdit": true,
+        "createdAt": "2024-01-15T10:30:00"
+    },
+    "message": "大会が作成されました。",
+    "nextActions": [
+        "大会情報を編集する",
+        "エントリー受付を開始する",
+        "大会を削除する"
+    ]
+}
+```
+
+==== エラーレスポンス例
+```json
+HTTP/1.1 400 Bad Request
+Content-Type: application/json
+
+{
+    "error": {
+        "code": "MSG_TRN_0006",
+        "message": "エントリー締切日は開催日以前の日付を入力してください。",
+        "details": {
+            "field": "entryDeadline",
+            "rejectedValue": "2024-03-20",
+            "eventDate": "2024-03-15"
+        },
+        "timestamp": "2024-01-15T10:30:00"
+    }
+}
+```

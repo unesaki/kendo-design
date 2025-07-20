@@ -1,0 +1,682 @@
+= 選手登録API 詳細設計書
+
+== 概要
+
+registerPlayersApi
+
+チームエントリー申請後に、団体戦に出場する選手構成（先鋒〜大将）を登録・管理するAPI。
+必要に応じて補欠選手も登録でき、登録完了まで段階的に選手を追加・編集可能。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[大会参加管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== RegisterPlayersRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|entryId
+|Long
+|@NotNull
+|対象チームエントリーID
+
+|roster
+|List<PlayerRegistrationDto>
+|@Valid, @Size(min=5, max=7)
+|選手構成（正選手5名+補欠最大2名）
+|===
+
+==== PlayerRegistrationDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|position
+|PlayerPosition
+|@NotNull
+|ポジション（先鋒〜大将、補欠1〜2）
+
+|playerName
+|String
+|@NotBlank, @Size(max=30)
+|選手名
+
+|clubId
+|Long
+|@NotNull
+|選手の所属クラブID（現在は申請クラブと同一必須）
+|===
+
+==== RegisterPlayersResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|entryId
+|Long
+|対象エントリーID
+
+|teamEntry
+|TournamentTeamEntryDto
+|更新されたエントリー情報（選手構成含む）
+
+|registrationStatus
+|RosterRegistrationStatus
+|選手登録状況
+
+|validationResult
+|RosterValidationDto
+|選手構成の検証結果
+
+|message
+|String
+|登録完了メッセージ
+|===
+
+==== RosterValidationDto
+
+|===
+|フィールド名 |型 |説明
+
+|isComplete
+|Boolean
+|必要選手の登録完了フラグ
+
+|missingPositions
+|List<PlayerPosition>
+|未登録のポジション一覧
+
+|duplicateNames
+|List<String>
+|重複している選手名一覧
+
+|errors
+|List<String>
+|その他のエラーメッセージ
+
+|warnings
+|List<String>
+|警告メッセージ（補欠未登録等）
+|===
+
+=== Enum定義
+
+==== RosterRegistrationStatus
+
+|===
+|値 |説明
+
+|INCOMPLETE
+|選手登録未完了（正選手5名未満）
+
+|COMPLETE
+|選手登録完了（正選手5名以上）
+
+|COMPLETE_WITH_SUBSTITUTES
+|補欠選手も含めて登録完了
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|entryIdがnullの場合
+|エントリーIDは必須です。
+|MSG_SYS_0005
+|400
+
+|2
+|rosterが空または5名未満の場合
+|正選手5名の登録が必要です。
+|MSG_PTC_0012
+|400
+
+|3
+|rosterが7名を超える場合
+|登録できる選手は最大7名です。
+|MSG_PTC_0019
+|400
+
+|4
+|playerNameが空の場合
+|選手名は必須です。
+|MSG_PTC_0003
+|400
+
+|5
+|playerNameが30文字を超える場合
+|選手名は30文字以内で入力してください。
+|MSG_PTC_0004
+|400
+
+|6
+|同じ選手名が複数登録されている場合
+|同じ選手が複数のポジションに登録されています。
+|MSG_PTC_0013
+|400
+
+|7
+|必要なポジションが登録されていない場合
+|必要な選手が登録されていません。
+|MSG_PTC_0012
+|400
+
+|8
+|指定されたエントリーが存在しない場合
+|指定されたエントリーが見つかりません。
+|MSG_PTC_0009
+|404
+
+|9
+|編集権限がない場合
+|このエントリーを編集する権限がありません。
+|MSG_PTC_0020
+|403
+
+|10
+|選手登録期限を過ぎている場合
+|選手登録期限を過ぎています。
+|MSG_PTC_0021
+|403
+
+|11
+|エントリーが承認済みで変更不可の場合
+|承認済みのエントリーは変更できません。
+|MSG_PTC_0022
+|409
+
+|12
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`TournamentParticipationController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|participationService
+|TournamentParticipationService
+|大会参加処理を実行するサービス。`@RequiredArgsConstructor` によりインジェクションされる。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/participation"), @RequiredArgsConstructor
+
+|メソッド（選手登録）
+|@PutMapping("/entries/{entryId}/roster")
+
+|メソッド（選手構成取得）
+|@GetMapping("/entries/{entryId}/roster")
+
+|引数
+|@PathVariable, @RequestBody, @Validated, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+* `registerPlayers` - 選手登録・更新
+* `getRoster` - 現在の選手構成取得
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|registerPlayers
+|ResponseEntity<RegisterPlayersResponseDto>
+|登録成功時に選手構成と検証結果を返却
+
+|getRoster
+|ResponseEntity<TournamentTeamEntryDto>
+|現在の選手構成を含むエントリー情報を返却
+|===
+
+=== 処理詳細
+
+==== registerPlayers
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|パスパラメータからエントリーID、リクエストボディから選手構成を DTO（RegisterPlayersRequestDto）として受け取る。
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーの ID（userId）を取得する。
+
+|3
+|サービス呼び出し
+|`participationService.registerPlayers(entryId, requestDto, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `RegisterPlayersResponseDto` を `ResponseEntity.ok().body(...)` にラップして返却する。
+
+|–
+|エラー処理
+|* バリデーションエラーが発生した場合は適切なメッセージIDを返す  
+* 権限エラーや期限エラーの場合は適切なメッセージIDを返す
+|===
+
+==== getRoster
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエストの受領
+|パスパラメータからエントリーIDを取得。
+
+|2
+|ユーザーIDの取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーの ID（userId）を取得する。
+
+|3
+|サービス呼び出し
+|`participationService.getRosterDetails(entryId, userId)` を呼び出す。
+
+|4
+|レスポンス生成
+|戻り値の `TournamentTeamEntryDto` を `ResponseEntity.ok().body(...)` にラップして返却する。
+|===
+
+== Service定義
+
+=== インターフェース
+
+`TournamentParticipationService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|registerPlayers
+|Long entryId, RegisterPlayersRequestDto, Long userId
+|RegisterPlayersResponseDto
+|指定エントリーの選手構成を登録・更新する。
+
+|getRosterDetails
+|Long entryId, Long userId
+|TournamentTeamEntryDto
+|指定エントリーの詳細情報（選手構成含む）を取得する。
+|===
+
+=== 実装クラス
+
+`TournamentParticipationServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|tournamentTeamEntryRepository
+|TournamentTeamEntryRepository
+|`@RequiredArgsConstructor` によりインジェクションされる
+
+|tournamentTeamRosterRepository
+|TournamentTeamRosterRepository
+|選手構成管理に使用
+
+|participationPermissionService
+|ParticipationPermissionService
+|権限チェックに使用
+
+|participationNotificationService
+|ParticipationNotificationService
+|通知送信に使用
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== 処理詳細
+
+==== registerPlayers
+
+|===
+|順序 |概要 |詳細
+
+|1
+|エントリー情報取得・権限確認
+|* `tournamentTeamEntryRepository.findByIdWithDetails(entryId)` でエントリー詳細を取得  
+* 存在しない場合は `EntryNotFoundException` をスロー → `MSG_PTC_0009`  
+* `participationPermissionService.validateEditPermission(userId, entryId)` で編集権限を確認
+
+|2
+|選手登録期限確認
+|* 大会の選手登録締切日（通常はエントリー締切と同日）をチェック  
+* 期限を過ぎている場合は `RegistrationDeadlineException` をスロー → `MSG_PTC_0021`
+
+|3
+|エントリー状態確認
+|* エントリー状態が PENDING 以外（APPROVED等）で変更不可の場合は `EntryLockedException` をスロー → `MSG_PTC_0022`
+
+|4
+|選手構成の検証
+|==== 4-1. 基本検証 ====  
+* 正選手5名（先鋒〜大将）が全て登録されているかチェック  
+* 補欠選手が2名以下かチェック  
+* 同一選手名の重複がないかチェック  
+
+==== 4-2. ポジション検証 ====  
+* 各ポジションに重複登録がないかチェック  
+* 必須ポジション（SENPO〜TAISHO）の欠落がないかチェック  
+
+==== 4-3. エラー・警告生成 ====  
+* 検証結果を RosterValidationDto に集約  
+* 致命的エラーがある場合は `RosterValidationException` をスロー
+|5
+|既存選手構成の削除
+|* `tournamentTeamRosterRepository.deleteByTeamEntryId(entryId)` で既存の選手構成を削除
+
+|6
+|新選手構成の登録
+|* 各 PlayerRegistrationDto から TournamentTeamRosterEntity を生成：  
+** teamEntryId: 対象エントリーID  
+** position: ポジション  
+** playerName: 選手名  
+** clubId: 選手の所属クラブID  
+** isSubstitute: 補欠選手フラグ  
+** createdAt, updatedAt: 現在日時  
+* `tournamentTeamRosterRepository.insertRoster(rosterEntities)` で一括登録
+
+|7
+|登録状況の判定
+|* 正選手5名が揃っている場合：  
+** 補欠選手も登録されている場合は COMPLETE_WITH_SUBSTITUTES  
+** 補欠選手がいない場合は COMPLETE  
+* 正選手が不足している場合は INCOMPLETE
+
+|8
+|エントリー情報の更新
+|* 必要に応じてエントリーの状態や情報を更新  
+* 選手登録完了時は通知送信を検討
+
+|9
+|レスポンス生成
+|RegisterPlayersResponseDto に以下の情報を設定して返却：  
+* entryId: 対象エントリーID  
+* teamEntry: 更新されたエントリー情報（選手構成含む）  
+* registrationStatus: 選手登録状況  
+* validationResult: 選手構成の検証結果  
+* message: "選手登録を更新しました。"
+
+|–
+|エラー処理
+|* トランザクション内でエラーが発生した場合はロールバック  
+* 各種例外をスローし、エラーメッセージを返す
+|===
+
+==== getRosterDetails
+
+|===
+|順序 |概要 |詳細
+
+|1
+|エントリー情報取得・権限確認
+|* `tournamentTeamEntryRepository.findByIdWithDetails(entryId)` でエントリー詳細を取得  
+* `participationPermissionService.validateEditPermission(userId, entryId)` で閲覧権限を確認
+
+|2
+|選手構成取得
+|* `tournamentTeamRosterRepository.findByTeamEntryId(entryId)` で選手構成を取得  
+* ポジション順（先鋒〜大将、補欠1〜2）でソート
+
+|3
+|レスポンス生成
+|TournamentTeamEntryDto に選手構成情報を含めて返却
+|===
+
+== Repository定義
+
+=== TournamentTeamRosterRepository（追加メソッド）
+
+共通定義に加えて、以下のメソッドを使用：
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findByTeamEntryId
+|Long teamEntryId
+|List<TeamRosterDto>
+|チームの選手構成をポジション順で取得
+
+|insertRoster
+|List<TournamentTeamRosterEntity>
+|void
+|選手構成を一括登録
+
+|deleteByTeamEntryId
+|Long teamEntryId
+|void
+|チームの選手構成を全削除
+
+|validateRosterCompleteness
+|Long teamEntryId
+|RosterValidationDto
+|選手構成の完全性を検証
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 選手構成取得
+
+[source,sql]
+----
+SELECT 
+    r.team_entry_id,
+    r.position,
+    r.player_name,
+    r.club_id,
+    r.is_substitute,
+    c.name as club_name
+FROM tournament_team_rosters r
+JOIN clubs c ON r.club_id = c.id
+WHERE r.team_entry_id = #{teamEntryId}
+ORDER BY 
+    CASE r.position
+        WHEN 'SENPO' THEN 1
+        WHEN 'JIHO' THEN 2
+        WHEN 'CHUKEN' THEN 3
+        WHEN 'FUKUSHO' THEN 4
+        WHEN 'TAISHO' THEN 5
+        WHEN 'SUBSTITUTE_1' THEN 6
+        WHEN 'SUBSTITUTE_2' THEN 7
+    END
+----
+
+==== 選手構成一括登録
+
+[source,sql]
+----
+INSERT INTO tournament_team_rosters (
+    team_entry_id, position, player_name, club_id, is_substitute, created_at, updated_at
+) VALUES
+<foreach collection="roster" item="player" separator=",">
+    (#{player.teamEntryId}, #{player.position}, #{player.playerName}, 
+     #{player.clubId}, #{player.isSubstitute}, #{player.createdAt}, #{player.updatedAt})
+</foreach>
+----
+
+==== 選手構成削除
+
+[source,sql]
+----
+DELETE FROM tournament_team_rosters
+WHERE team_entry_id = #{teamEntryId}
+----
+
+== 業務ルール
+
+=== 選手登録ルール
+
+1. **必須ポジション**: 先鋒、次鋒、中堅、副将、大将の5名は必須
+2. **補欠選手**: 最大2名まで登録可能（任意）
+3. **重複禁止**: 同一選手名の複数ポジション登録は不可
+4. **所属確認**: 選手は申請クラブの所属である必要がある（現在は自動設定）
+
+=== 編集制限ルール
+
+* **期限前**: 選手登録締切前のみ編集可能
+* **ステータス制限**: PENDINGステータスのエントリーのみ編集可能
+* **権限確認**: 申請クラブの管理者のみ編集可能
+
+=== 検証ルール
+
+* **完全性チェック**: 必要ポジションの登録完了確認
+* **重複チェック**: 選手名・ポジションの重複確認
+* **制限チェック**: 補欠選手数の上限確認
+
+== 通知機能
+
+=== 選手登録完了通知
+
+選手登録が完了した場合、以下の通知を送信：
+
+* **申請クラブ**: 「選手登録が完了しました」
+* **主催者**: 「○○クラブの選手登録が完了しました」（承認時の参考情報）
+
+=== 期限リマインダー通知
+
+選手登録締切の1日前に以下の通知を送信：
+
+* **未完了クラブ**: 「選手登録の締切が明日です」
+* **内容**: 未登録ポジション一覧、登録用リンク
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== 選手登録リクエスト
+```json
+PUT /api/participation/entries/456/roster
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "entryId": 456,
+    "roster": [
+        {
+            "position": "SENPO",
+            "playerName": "田中太郎",
+            "clubId": 2
+        },
+        {
+            "position": "JIHO",
+            "playerName": "佐藤花子",
+            "clubId": 2
+        },
+        {
+            "position": "CHUKEN",
+            "playerName": "鈴木一郎",
+            "clubId": 2
+        },
+        {
+            "position": "FUKUSHO",
+            "playerName": "高橋次郎",
+            "clubId": 2
+        },
+        {
+            "position": "TAISHO",
+            "playerName": "伊藤三郎",
+            "clubId": 2
+        },
+        {
+            "position": "SUBSTITUTE_1",
+            "playerName": "山田四郎",
+            "clubId": 2
+        }
+    ]
+}
+```
+
+==== 選手登録レスポンス
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "entryId": 456,
+    "teamEntry": {
+        "id": 456,
+        "teamName": "大阪剣道クラブA",
+        "status": "PENDING",
+        "roster": [
+            {
+                "position": "SENPO",
+                "positionDisplay": "先鋒",
+                "playerName": "田中太郎",
+                "clubName": "大阪剣道クラブ",
+                "isSubstitute": false
+            }
+            // ... 他の選手
+        ]
+    },
+    "registrationStatus": "COMPLETE_WITH_SUBSTITUTES",
+    "validationResult": {
+        "isComplete": true,
+        "missingPositions": [],
+        "duplicateNames": [],
+        "errors": [],
+        "warnings": []
+    },
+    "message": "選手登録を更新しました。"
+}
+```
+
+==== 選手構成取得リクエスト
+```
+GET /api/participation/entries/456/roster
+Authorization: Bearer {jwt-token}
+```
+
+==== 検証エラーレスポンス例
+```json
+HTTP/1.1 400 Bad Request
+Content-Type: application/json
+
+{
+    "error": {
+        "code": "MSG_PTC_0013",
+        "message": "同じ選手が複数のポジションに登録されています。",
+        "details": {
+            "duplicateNames": ["田中太郎"],
+            "validationResult": {
+                "isComplete": false,
+                "duplicateNames": ["田中太郎"],
+                "errors": ["田中太郎が複数のポジションに登録されています"]
+            }
+        },
+        "timestamp": "2024-01-15T10:30:00"
+    }
+}
+```

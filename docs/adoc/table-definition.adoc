@@ -223,7 +223,7 @@
 |お知らせID
 
 |title
-|VARCHAR(100)
+|VARCHAR(200)
 |NOT NULL
 |お知らせタイトル
 
@@ -232,20 +232,45 @@
 |NOT NULL
 |本文（HTMLやMarkdown可）
 
+|notification_type
+|VARCHAR(30)
+|NOT NULL
+|お知らせ種別（SYSTEM_UPDATE, MAINTENANCE等）
+
+|priority
+|VARCHAR(20)
+|NOT NULL
+|優先度（EMERGENCY, HIGH, MEDIUM, LOW, INFO）
+
+|target_type
+|VARCHAR(30)
+|NOT NULL
+|対象種別（ALL_USERS, CLUB_MEMBERS等）
+
+|target_conditions
+|TEXT
+|
+|対象条件（JSON形式）
+
+|is_active
+|BOOLEAN
+|DEFAULT TRUE
+|有効フラグ
+
 |published_at
 |DATETIME
 |NOT NULL
 |公開日時
 
-|target_scope
-|VARCHAR(20)
+|expires_at
+|DATETIME
 |
-|対象範囲（ALL, CLUBなど）
+|有効期限
 
-|target_condition
-|VARCHAR(255)
-|
-|条件（JSONやタグID等）
+|created_by
+|BIGINT
+|FK → users.id
+|作成者ID
 
 |created_at
 |DATETIME
@@ -258,19 +283,24 @@
 |更新日時
 |===
 
-=== user_notification_meta テーブル
+=== user_notification_status テーブル
 
 |===
 |カラム名 |型 |制約 |説明
 
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|ユーザー通知状態ID
+
 |user_id
 |BIGINT
-|PK, FK → users.id
+|FK → users.id
 |対象ユーザーID
 
 |notification_id
 |BIGINT
-|PK, FK → notifications.id
+|FK → notifications.id
 |対象お知らせID
 
 |is_deleted
@@ -283,6 +313,21 @@
 |DEFAULT FALSE
 |ブックマーク状態
 
+|viewed_at
+|DATETIME
+|
+|閲覧日時
+
+|deleted_at
+|DATETIME
+|
+|削除日時
+
+|bookmarked_at
+|DATETIME
+|
+|ブックマーク日時
+
 |created_at
 |DATETIME
 |DEFAULT CURRENT_TIMESTAMP
@@ -292,6 +337,62 @@
 |DATETIME
 |DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 |更新日時
+|===
+
+=== notification_delivery_logs テーブル
+
+|===
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|配信ログID
+
+|notification_id
+|BIGINT
+|FK → notifications.id
+|お知らせID
+
+|delivery_type
+|VARCHAR(20)
+|NOT NULL
+|配信種別（EMAIL, PUSH）
+
+|target_user_count
+|INTEGER
+|NOT NULL
+|対象ユーザー数
+
+|success_count
+|INTEGER
+|DEFAULT 0
+|成功数
+
+|failure_count
+|INTEGER
+|DEFAULT 0
+|失敗数
+
+|delivery_status
+|VARCHAR(20)
+|NOT NULL
+|配信状況（SCHEDULED, IN_PROGRESS, COMPLETED, FAILED）
+
+|started_at
+|DATETIME
+|
+|配信開始日時
+
+|completed_at
+|DATETIME
+|
+|配信完了日時
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
 |===
 
 == クラブ管理機能
@@ -593,36 +694,46 @@
 |大会ID
 
 |name
-|VARCHAR(100)
+|VARCHAR(200)
 |NOT NULL
 |大会名
+
+|description
+|TEXT
+|
+|大会説明
 
 |host_club_id
 |BIGINT
 |FK → clubs.id
 |主催クラブID
 
-|type
-|VARCHAR(20)
+|tournament_type
+|VARCHAR(30)
 |NOT NULL
-|種別（個人戦／団体戦）
+|大会種別（TEAM, INDIVIDUAL）
 
-|format
-|VARCHAR(20)
+|match_format
+|VARCHAR(30)
 |NOT NULL
-|形式（トーナメント／総当たり）
+|対戦形式（TOURNAMENT, ROUND_ROBIN, SWISS）
 
 |status
-|VARCHAR(20)
+|VARCHAR(30)
 |NOT NULL
-|ステータス（受付中／進行中／終了）
+|ステータス（DRAFT, ENTRY_OPEN, ENTRY_CLOSED, BRACKET_CREATED, IN_PROGRESS, SUSPENDED, COMPLETED, CANCELLED, ARCHIVED）
 
-|start_date
+|visibility
+|VARCHAR(30)
+|NOT NULL
+|公開範囲（PUBLIC, CLUB_ONLY, REGION_ONLY, PRIVATE）
+
+|event_date
 |DATE
 |NOT NULL
 |開催日
 
-|end_date
+|event_end_date
 |DATE
 |
 |終了日（任意）
@@ -632,10 +743,55 @@
 |
 |エントリー締切日
 
-|public_scope
-|VARCHAR(20)
+|venue
+|VARCHAR(200)
 |
-|公開範囲（全体／クラブ限定など）
+|開催会場
+
+|contact_info
+|TEXT
+|
+|連絡先情報
+
+|rules
+|TEXT
+|
+|大会ルール
+
+|max_participants
+|INTEGER
+|
+|参加上限数
+
+|is_public
+|BOOLEAN
+|DEFAULT TRUE
+|公開フラグ
+
+|is_bracket_public
+|BOOLEAN
+|DEFAULT FALSE
+|トーナメント表公開フラグ
+
+|is_result_public
+|BOOLEAN
+|DEFAULT FALSE
+|試合結果公開フラグ
+
+|status_changed_at
+|DATETIME
+|
+|ステータス変更日時
+
+|status_changed_by
+|BIGINT
+|FK → users.id
+|ステータス変更者ID
+
+|created_by
+|BIGINT
+|FK → users.id
+|作成者ID
 
 |created_at
 |DATETIME
@@ -648,7 +804,73 @@
 |更新日時
 |===
 
-=== tournament_matches テーブル
+=== tournament_brackets テーブル
+
+|===
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|ブラケットID
+
+|tournament_id
+|BIGINT
+|FK → tournaments.id
+|大会ID
+
+|bracket_type
+|VARCHAR(30)
+|NOT NULL
+|トーナメント種別（SINGLE_ELIMINATION, DOUBLE_ELIMINATION等）
+
+|seeding_method
+|VARCHAR(30)
+|NOT NULL
+|シード方法（NONE, MANUAL, RANKING_BASED等）
+
+|total_rounds
+|INTEGER
+|NOT NULL
+|総ラウンド数
+
+|total_matches
+|INTEGER
+|NOT NULL
+|総試合数
+
+|participant_count
+|INTEGER
+|NOT NULL
+|参加者数
+
+|settings
+|TEXT
+|
+|ブラケット設定（JSON形式）
+
+|status
+|VARCHAR(30)
+|NOT NULL
+|ステータス（DRAFT, READY, PUBLISHED, LOCKED）
+
+|created_by
+|BIGINT
+|FK → users.id
+|作成者ID
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
+|===
+
+=== bracket_matches テーブル
 
 |===
 |カラム名 |型 |制約 |説明
@@ -658,40 +880,75 @@
 |PK, AUTO_INCREMENT
 |試合ID
 
-|tournament_id
+|bracket_id
 |BIGINT
-|FK → tournaments.id
-|大会ID
+|FK → tournament_brackets.id
+|ブラケットID
 
 |round
-|VARCHAR(20)
+|INTEGER
+|NOT NULL
+|ラウンド番号
+
+|round_name
+|VARCHAR(50)
 |
-|ラウンド（例：1回戦）
+|ラウンド名（決勝、準決勝等）
+
+|match_number
+|INTEGER
+|NOT NULL
+|試合番号
+
+|position
+|INTEGER
+|
+|トーナメント表内の位置
 
 |red_entry_id
 |BIGINT
-|FK → エントリーテーブル
-|赤側参加者（チームまたは個人）
+|FK → tournament_team_entries.id
+|赤側エントリーID
 
 |white_entry_id
 |BIGINT
-|FK → エントリーテーブル
-|白側参加者
+|FK → tournament_team_entries.id
+|白側エントリーID
 
 |status
-|VARCHAR(20)
-|
-|試合状況（未開始／進行中／完了）
+|VARCHAR(30)
+|NOT NULL
+|試合状況（SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED, POSTPONED）
 
-|winner
-|ENUM('red', 'white', 'draw')
+|scheduled_at
+|DATETIME
 |
-|勝者
+|試合予定日時
 
-|published
+|venue
+|VARCHAR(200)
+|
+|試合会場
+
+|court_number
+|INTEGER
+|
+|コート番号
+
+|is_bye
 |BOOLEAN
 |DEFAULT FALSE
-|公開状態
+|不戦勝フラグ
+
+|depends_on
+|TEXT
+|
+|依存する試合ID一覧（JSON形式）
+
+|next_match_id
+|BIGINT
+|FK → bracket_matches.id
+|次の試合ID
 
 |created_at
 |DATETIME
@@ -702,6 +959,397 @@
 |DATETIME
 |DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 |更新日時
+|===
+
+=== match_results テーブル
+
+|===
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|試合結果ID
+
+|match_id
+|BIGINT
+|FK → bracket_matches.id
+|試合ID
+
+|tournament_id
+|BIGINT
+|FK → tournaments.id
+|大会ID
+
+|result_type
+|VARCHAR(20)
+|NOT NULL
+|結果種別（PERSONAL, TEAM）
+
+|winner
+|VARCHAR(10)
+|NOT NULL
+|勝者（red, white, draw）
+
+|red_score
+|INTEGER
+|NOT NULL
+|赤の得点
+
+|white_score
+|INTEGER
+|NOT NULL
+|白の得点
+
+|duration
+|VARCHAR(20)
+|
+|試合時間
+
+|result_data
+|TEXT
+|
+|詳細結果データ（JSON形式）
+
+|is_public
+|BOOLEAN
+|DEFAULT FALSE
+|公開フラグ
+
+|public_level
+|VARCHAR(30)
+|
+|公開レベル（PRIVATE, PARTICIPANTS_ONLY等）
+
+|is_official
+|BOOLEAN
+|DEFAULT TRUE
+|公式記録フラグ
+
+|verification_status
+|VARCHAR(30)
+|DEFAULT 'UNVERIFIED'
+|検証ステータス（UNVERIFIED, VERIFIED, DISPUTED, CONFIRMED）
+
+|recorded_by
+|BIGINT
+|FK → users.id
+|記録者ID
+
+|recorded_at
+|DATETIME
+|NOT NULL
+|記録日時
+
+|published_at
+|DATETIME
+|
+|公開日時
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
+|===
+
+=== personal_match_results テーブル
+
+|===
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|個人戦結果ID
+
+|match_result_id
+|BIGINT
+|FK → match_results.id
+|試合結果ID
+
+|position
+|VARCHAR(20)
+|
+|ポジション（先鋒、次鋒等）
+
+|red_player_id
+|BIGINT
+|
+|赤側選手ID
+
+|white_player_id
+|BIGINT
+|
+|白側選手ID
+
+|winner
+|VARCHAR(10)
+|NOT NULL
+|勝者（red, white, draw）
+
+|red_score
+|INTEGER
+|DEFAULT 0
+|赤側スコア
+
+|white_score
+|INTEGER
+|DEFAULT 0
+|白側スコア
+
+|end_condition
+|VARCHAR(30)
+|NOT NULL
+|終了条件（TIME_UP, IPPON, HANSOKU等）
+
+|duration
+|VARCHAR(20)
+|
+|試合時間
+
+|special_notes
+|TEXT
+|
+|特記事項
+
+|is_key_match
+|BOOLEAN
+|DEFAULT FALSE
+|勝敗を決した試合フラグ
+
+|judge_notes
+|TEXT
+|
+|審判メモ
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+
+|updated_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+|更新日時
+|===
+
+=== scoring_points テーブル
+
+|===
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|ポイントID
+
+|personal_result_id
+|BIGINT
+|FK → personal_match_results.id
+|個人戦結果ID
+
+|player_id
+|BIGINT
+|
+|選手ID
+
+|score_type
+|VARCHAR(10)
+|NOT NULL
+|得点種別（MEN, KOTE, DOU, TSUKI）
+
+|timestamp
+|TIME
+|NOT NULL
+|取得時刻
+
+|technique
+|VARCHAR(100)
+|
+|技の詳細
+
+|is_valid
+|BOOLEAN
+|DEFAULT TRUE
+|有効フラグ
+
+|judge_decision
+|TEXT
+|
+|審判判定（JSON形式）
+
+|video_timestamp
+|VARCHAR(20)
+|
+|映像タイムスタンプ
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+|===
+
+=== penalties テーブル
+
+|===
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|反則ID
+
+|personal_result_id
+|BIGINT
+|FK → personal_match_results.id
+|個人戦結果ID
+
+|player_id
+|BIGINT
+|
+|選手ID
+
+|penalty_type
+|VARCHAR(30)
+|NOT NULL
+|反則種別（MUBOBI, JOGAI等）
+
+|timestamp
+|TIME
+|NOT NULL
+|発生時刻
+
+|reason
+|VARCHAR(200)
+|NOT NULL
+|反則理由
+
+|severity
+|VARCHAR(20)
+|NOT NULL
+|重要度（WARNING, MINOR, MAJOR, HANSOKU）
+
+|is_warning
+|BOOLEAN
+|DEFAULT FALSE
+|警告フラグ
+
+|affects_score
+|BOOLEAN
+|DEFAULT FALSE
+|スコアへの影響フラグ
+
+|referee_notes
+|TEXT
+|
+|審判コメント
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+|===
+
+=== tournament_status_history テーブル
+
+|===
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|履歴ID
+
+|tournament_id
+|BIGINT
+|FK → tournaments.id
+|大会ID
+
+|previous_status
+|VARCHAR(30)
+|
+|変更前ステータス
+
+|new_status
+|VARCHAR(30)
+|NOT NULL
+|変更後ステータス
+
+|transition_type
+|VARCHAR(30)
+|NOT NULL
+|遷移種別（MANUAL, AUTOMATIC, SCHEDULED等）
+
+|reason
+|TEXT
+|
+|変更理由
+
+|changed_by
+|BIGINT
+|FK → users.id
+|変更者ID
+
+|changed_at
+|DATETIME
+|NOT NULL
+|変更日時
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
+|===
+
+=== auto_transitions テーブル
+
+|===
+|カラム名 |型 |制約 |説明
+
+|id
+|BIGINT
+|PK, AUTO_INCREMENT
+|自動遷移ID
+
+|tournament_id
+|BIGINT
+|FK → tournaments.id
+|大会ID
+
+|target_status
+|VARCHAR(30)
+|NOT NULL
+|目標ステータス
+
+|scheduled_at
+|DATETIME
+|NOT NULL
+|実行予定日時
+
+|condition_type
+|VARCHAR(50)
+|
+|条件種別
+
+|executed
+|BOOLEAN
+|DEFAULT FALSE
+|実行済みフラグ
+
+|cancelled
+|BOOLEAN
+|DEFAULT FALSE
+|キャンセルフラグ
+
+|created_at
+|DATETIME
+|DEFAULT CURRENT_TIMESTAMP
+|登録日時
 |===
 
 === individual_match_results テーブル
@@ -1143,7 +1791,7 @@
 
 |record_id
 |BIGINT
-|NOT NULL, FK(team_matches.id)
+|NOT NULL, FK(team_match_records.id)
 |対象団体戦記録ID
 
 |request_type

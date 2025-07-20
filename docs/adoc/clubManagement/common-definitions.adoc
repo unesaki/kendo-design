@@ -1,0 +1,547 @@
+= クラブ管理機能 共通定義
+
+== 概要
+
+クラブ管理機能で共通して使用されるEntity、Dto、エラーメッセージ等を定義する。
+各機能の詳細設計書では、この共通定義を参照することで重複を避ける。
+
+== 共通Entity定義
+
+=== ClubEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|クラブID（自動採番）
+
+|name
+|String
+|クラブ名（重複可）
+
+|createdBy
+|Long
+|作成ユーザーID（初期管理者）
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== ClubMemberEntity
+
+|===
+|フィールド名 |型 |説明
+
+|userId
+|Long
+|ユーザーID（複合PK）
+
+|clubId
+|Long
+|クラブID（複合PK）
+
+|role
+|ClubRole
+|ロール（ADMIN/MEMBER）
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== ClubJoinRequestEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|申請ID（自動採番）
+
+|userId
+|Long
+|申請ユーザー
+
+|clubId
+|Long
+|対象クラブ
+
+|status
+|JoinRequestStatus
+|ステータス（PENDING/APPROVED/REJECTED）
+
+|requestedAt
+|LocalDateTime
+|申請日時
+
+|respondedAt
+|LocalDateTime
+|対応日時（任意）
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== ClubInvitationEntity
+
+|===
+|フィールド名 |型 |説明
+
+|token
+|String
+|招待トークン（UUID、PK）
+
+|clubId
+|Long
+|招待対象クラブ
+
+|expiresAt
+|LocalDateTime
+|有効期限（1時間後）
+
+|reusable
+|Boolean
+|再利用可能かどうか（初期値：false）
+
+|createdBy
+|Long
+|招待作成ユーザー
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+== 共通Enum定義
+
+=== ClubRole
+
+|===
+|値 |説明
+
+|ADMIN
+|管理者（クラブ管理権限あり）
+
+|MEMBER
+|参加者（一般メンバー）
+|===
+
+=== JoinRequestStatus
+
+|===
+|値 |説明
+
+|PENDING
+|申請中（未対応）
+
+|APPROVED
+|承認済み
+
+|REJECTED
+|拒否済み
+|===
+
+== 共通Dto定義
+
+=== ClubDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|クラブID
+
+|name
+|String
+|クラブ名
+
+|createdBy
+|Long
+|作成ユーザーID
+
+|memberCount
+|Integer
+|メンバー数
+
+|currentUserRole
+|ClubRole
+|現在のユーザーのロール（認証時のみ）
+
+|createdAt
+|LocalDateTime
+|作成日時
+|===
+
+=== ClubMemberDto
+
+|===
+|フィールド名 |型 |説明
+
+|userId
+|Long
+|ユーザーID
+
+|userName
+|String
+|ユーザー名
+
+|userEmail
+|String
+|メールアドレス
+
+|role
+|ClubRole
+|ロール
+
+|joinedAt
+|LocalDateTime
+|参加日時
+|===
+
+=== ClubJoinRequestDto
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|申請ID
+
+|userId
+|Long
+|申請ユーザーID
+
+|userName
+|String
+|申請ユーザー名
+
+|userEmail
+|String
+|申請ユーザーメールアドレス
+
+|clubId
+|Long
+|対象クラブID
+
+|clubName
+|String
+|対象クラブ名
+
+|status
+|JoinRequestStatus
+|ステータス
+
+|requestedAt
+|LocalDateTime
+|申請日時
+
+|respondedAt
+|LocalDateTime
+|対応日時
+|===
+
+=== ClubInvitationDto
+
+|===
+|フィールド名 |型 |説明
+
+|token
+|String
+|招待トークン
+
+|clubId
+|Long
+|招待対象クラブID
+
+|clubName
+|String
+|招待対象クラブ名
+
+|expiresAt
+|LocalDateTime
+|有効期限
+
+|inviteUrl
+|String
+|招待URL（フロントエンド用）
+
+|createdBy
+|Long
+|招待作成ユーザーID
+
+|createdAt
+|LocalDateTime
+|作成日時
+|===
+
+== 共通バリデーション
+
+=== クラブ名バリデーション
+
+|===
+|項目 |ルール |エラーメッセージID
+
+|必須チェック
+|@NotBlank
+|MSG_CLB_0001
+
+|文字数制限
+|@Size(max=100)
+|MSG_CLB_0002
+|===
+
+=== 権限チェック
+
+|===
+|チェック項目 |条件 |エラーメッセージID
+
+|クラブ管理者権限
+|currentUser.role == ADMIN
+|MSG_CLB_0003
+
+|クラブメンバー権限
+|currentUser is member of club
+|MSG_CLB_0004
+
+|自分以外のユーザー操作
+|targetUserId != currentUserId
+|MSG_CLB_0005
+|===
+
+== 共通エラーメッセージ一覧
+
+|===
+|メッセージID |エラー内容 |ステータス
+
+|MSG_CLB_0001
+|クラブ名は必須です。
+|400
+
+|MSG_CLB_0002
+|クラブ名は100文字以内で入力してください。
+|400
+
+|MSG_CLB_0003
+|この操作にはクラブ管理者権限が必要です。
+|403
+
+|MSG_CLB_0004
+|このクラブのメンバーではありません。
+|403
+
+|MSG_CLB_0005
+|自分以外のユーザーは操作できません。
+|403
+
+|MSG_CLB_0006
+|指定されたクラブが見つかりません。
+|404
+
+|MSG_CLB_0007
+|指定されたユーザーが見つかりません。
+|404
+
+|MSG_CLB_0008
+|既にこのクラブに参加しています。
+|409
+
+|MSG_CLB_0009
+|既に参加申請済みです。
+|409
+
+|MSG_CLB_0010
+|招待URLの有効期限が切れています。
+|410
+
+|MSG_CLB_0011
+|無効な招待URLです。
+|400
+
+|MSG_CLB_0012
+|参加申請が見つかりません。
+|404
+
+|MSG_CLB_0013
+|最後の管理者は退会できません。
+|409
+
+|MSG_CLB_0014
+|クラブの削除には全管理者の同意が必要です。
+|409
+|===
+
+== 共通Service定義
+
+=== ClubPermissionService
+
+クラブに関する権限チェックを行う共通サービス
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|isClubAdmin
+|Long userId, Long clubId
+|Boolean
+|指定ユーザーがクラブ管理者かどうか
+
+|isClubMember
+|Long userId, Long clubId
+|Boolean
+|指定ユーザーがクラブメンバーかどうか
+
+|validateClubAdminPermission
+|Long userId, Long clubId
+|void
+|管理者権限をチェック（例外スロー）
+
+|validateClubMemberPermission
+|Long userId, Long clubId
+|void
+|メンバー権限をチェック（例外スロー）
+
+|canDeleteClub
+|Long clubId
+|Boolean
+|クラブ削除が可能かどうか（全管理者確認）
+|===
+
+=== ClubNotificationService
+
+クラブ関連の通知を行う共通サービス
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|notifyJoinRequestReceived
+|Long clubId, Long requesterId
+|void
+|参加申請受信をクラブ管理者に通知
+
+|notifyJoinRequestApproved
+|Long userId, Long clubId
+|void
+|参加承認をユーザーに通知
+
+|notifyJoinRequestRejected
+|Long userId, Long clubId
+|void
+|参加拒否をユーザーに通知
+
+|notifyRoleChanged
+|Long userId, Long clubId, ClubRole newRole
+|void
+|ロール変更をユーザーに通知
+|===
+
+== 共通Repository定義
+
+=== ClubRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findById
+|Long clubId
+|Optional<ClubEntity>
+|クラブIDでクラブ情報を取得
+
+|findByIdWithMemberCount
+|Long clubId
+|Optional<ClubWithMemberCountDto>
+|メンバー数付きでクラブ情報を取得
+
+|insertClub
+|ClubEntity
+|void
+|クラブを登録
+
+|searchClubs
+|String keyword, Pageable pageable
+|Page<ClubDto>
+|クラブ名でクラブを検索
+
+|getClubsByUserId
+|Long userId
+|List<ClubDto>
+|ユーザーが所属するクラブ一覧を取得
+|===
+
+=== ClubMemberRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findByClubId
+|Long clubId
+|List<ClubMemberDto>
+|クラブのメンバー一覧を取得
+
+|findByUserIdAndClubId
+|Long userId, Long clubId
+|Optional<ClubMemberEntity>
+|特定ユーザーのクラブメンバー情報を取得
+
+|insertMember
+|ClubMemberEntity
+|void
+|クラブメンバーを登録
+
+|updateMemberRole
+|Long userId, Long clubId, ClubRole role
+|void
+|メンバーのロールを更新
+
+|deleteMember
+|Long userId, Long clubId
+|void
+|メンバーを削除
+
+|countAdminsByClubId
+|Long clubId
+|Integer
+|クラブの管理者数を取得
+|===
+
+== 共通定数
+
+=== ClubConstants
+
+|===
+|定数名 |値 |説明
+
+|INVITATION_EXPIRES_HOURS
+|1
+|招待URLの有効期限（時間）
+
+|MAX_CLUB_NAME_LENGTH
+|100
+|クラブ名の最大文字数
+
+|INVITATION_URL_PREFIX
+|/clubs/join?token=
+|招待URLのパス
+
+|DEFAULT_CLUB_ROLE
+|MEMBER
+|新規参加時のデフォルトロール
+|===

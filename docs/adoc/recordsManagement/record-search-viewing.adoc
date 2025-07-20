@@ -1,0 +1,866 @@
+= 記録閲覧・検索API 詳細設計書
+
+== 概要
+
+recordSearchAndViewingApi
+
+ユーザーが登録した個人戦・団体戦記録の閲覧、検索、フィルタリング機能を提供するAPI。
+自分の記録とクラブ公開された記録を対象とし、詳細な検索条件とページネーションに対応する。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[記録管理機能 共通定義] を参照すること。
+
+=== 専用Dto定義
+
+==== RecordSearchRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|keyword
+|String
+|@Size(max=100)
+|検索キーワード（大会名、選手名等）
+
+|recordType
+|RecordType
+|
+|記録種別フィルター（PERSONAL, TEAM, null=全て）
+
+|dateFrom
+|LocalDate
+|
+|試合日範囲（開始）
+
+|dateTo
+|LocalDate
+|
+|試合日範囲（終了）
+
+|visibility
+|RecordVisibility
+|
+|公開設定フィルター（PRIVATE, CLUB, null=全て）
+
+|playerName
+|String
+|@Size(max=50)
+|選手名フィルター
+
+|clubName
+|String
+|@Size(max=50)
+|クラブ名フィルター
+
+|tournamentName
+|String
+|@Size(max=100)
+|大会名フィルター
+
+|winnerOnly
+|Boolean
+|
+|勝利記録のみ表示（デフォルト：false）
+
+|includeClubRecords
+|Boolean
+|
+|クラブ公開記録を含める（デフォルト：true）
+
+|sortBy
+|RecordSortType
+|
+|ソート方法（DATE_DESC, DATE_ASC, TOURNAMENT_NAME）
+
+|page
+|Integer
+|@Min(0)
+|ページ番号（デフォルト：0）
+
+|size
+|Integer
+|@Min(1), @Max(100)
+|ページサイズ（デフォルト：20）
+|===
+
+==== RecordSearchResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|personalMatches
+|Page<PersonalMatchRecordDto>
+|個人戦記録（検索条件に応じて）
+
+|teamMatches
+|Page<TeamMatchRecordDto>
+|団体戦記録（検索条件に応じて）
+
+|searchCriteria
+|RecordSearchRequestDto
+|適用された検索条件
+
+|searchSummary
+|RecordSearchSummaryDto
+|検索結果サマリー
+
+|availableFilters
+|RecordFilterOptionsDto
+|利用可能なフィルター選択肢
+|===
+
+==== RecordSearchSummaryDto
+
+|===
+|フィールド名 |型 |説明
+
+|totalPersonalMatches
+|Long
+|個人戦記録総数
+
+|totalTeamMatches
+|Long
+|団体戦記録総数
+
+|totalWins
+|Long
+|勝利記録数
+
+|totalDraws
+|Long
+|引き分け記録数
+
+|recentTournaments
+|List<String>
+|最近の大会一覧（上位5件）
+
+|frequentOpponents
+|List<String>
+|よく対戦する相手（上位5件）
+|===
+
+==== RecordFilterOptionsDto
+
+|===
+|フィールド名 |型 |説明
+
+|availableTournaments
+|List<String>
+|記録された大会一覧
+
+|availableClubs
+|List<String>
+|記録されたクラブ一覧
+
+|availableOpponents
+|List<String>
+|対戦相手一覧
+
+|dateRange
+|DateRangeDto
+|記録された試合日の範囲
+
+|recordCounts
+|RecordCountsDto
+|記録種別ごとの件数
+|===
+
+==== RecordDetailViewDto
+
+|===
+|フィールド名 |型 |説明
+
+|record
+|Object
+|記録詳細（PersonalMatchRecordDto または TeamMatchRecordDto）
+
+|recordType
+|RecordType
+|記録種別
+
+|relatedRecords
+|List<Object>
+|関連記録（同じ大会、同じ相手等）
+
+|editHistory
+|List<RecordEditRequestDto>
+|編集履歴（権限がある場合のみ）
+
+|shareUrl
+|String
+|共有URL（共有可能な場合のみ）
+
+|statistics
+|RecordStatisticsDto
+|統計情報
+|===
+
+=== Enum定義
+
+==== RecordSortType
+
+|===
+|値 |説明
+
+|DATE_DESC
+|試合日降順（デフォルト）
+
+|DATE_ASC
+|試合日昇順
+
+|TOURNAMENT_NAME
+|大会名昇順
+
+|CREATED_DESC
+|登録日降順
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|keywordが100文字を超える場合
+|検索キーワードは100文字以内で入力してください。
+|MSG_REC_0025
+|400
+
+|2
+|dateFromがdateToより後の場合
+|開始日は終了日より前の日付を指定してください。
+|MSG_REC_0026
+|400
+
+|3
+|pageが負の値の場合
+|ページ番号は0以上で指定してください。
+|MSG_REC_0027
+|400
+
+|4
+|sizeが1未満または100を超える場合
+|ページサイズは1から100の間で指定してください。
+|MSG_REC_0028
+|400
+
+|5
+|指定された記録が見つからない場合
+|指定された記録が見つかりません。
+|MSG_REC_0013
+|404
+
+|6
+|記録の閲覧権限がない場合
+|この記録を閲覧する権限がありません。
+|MSG_REC_0029
+|403
+
+|7
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`RecordSearchController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|recordSearchService
+|RecordSearchService
+|記録検索処理を行うサービス。`@RequiredArgsConstructor` によりインジェクション。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/records/search"), @RequiredArgsConstructor
+
+|メソッド（統合検索）
+|@GetMapping
+
+|メソッド（個人戦検索）
+|@GetMapping("/personal")
+
+|メソッド（団体戦検索）
+|@GetMapping("/team")
+
+|メソッド（記録詳細取得）
+|@GetMapping("/{recordType}/{recordId}")
+
+|引数
+|@RequestParam, @PathVariable, @AuthenticationPrincipal, @Validated
+|===
+
+=== メソッド名
+
+* `searchRecords` - 統合記録検索
+* `searchPersonalMatches` - 個人戦記録検索
+* `searchTeamMatches` - 団体戦記録検索
+* `getRecordDetail` - 記録詳細取得
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|searchRecords
+|ResponseEntity<RecordSearchResponseDto>
+|検索結果と統計情報を返却
+
+|searchPersonalMatches
+|ResponseEntity<Page<PersonalMatchRecordDto>>
+|個人戦記録一覧をページネーションで返却
+
+|searchTeamMatches
+|ResponseEntity<Page<TeamMatchRecordDto>>
+|団体戦記録一覧をページネーションで返却
+
+|getRecordDetail
+|ResponseEntity<RecordDetailViewDto>
+|記録詳細と関連情報を返却
+|===
+
+=== 処理詳細
+
+==== searchRecords
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|検索条件をクエリパラメータから RecordSearchRequestDto として受け取る。
+
+|2
+|ユーザー・クラブ情報取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーIDと現在選択中のクラブIDを取得する。
+
+|3
+|サービス呼び出し
+|recordSearchService.searchRecords(searchCriteria, userId, clubId) を呼び出す。
+
+|4
+|レスポンス生成
+|検索結果と統計情報を含む RecordSearchResponseDto を返却する。
+
+|–
+|エラー処理
+|* バリデーションエラー時は適切なメッセージIDを返却  
+* 認証エラー時は MSG_SYS_0008 を返却
+|===
+
+==== getRecordDetail
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領
+|パスパラメータから記録種別（recordType）と記録ID（recordId）を取得。
+
+|2
+|ユーザー情報取得
+|`@AuthenticationPrincipal` により、ログイン中のユーザーIDを取得する。
+
+|3
+|サービス呼び出し
+|recordSearchService.getRecordDetail(recordType, recordId, userId) を呼び出す。
+
+|4
+|レスポンス生成
+|記録詳細と関連情報を含む RecordDetailViewDto を返却する。
+
+|–
+|エラー処理
+|* 記録が見つからない場合は MSG_REC_0013 を返却  
+* 閲覧権限がない場合は MSG_REC_0029 を返却
+|===
+
+== Service定義
+
+=== インターフェース
+
+`RecordSearchService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|searchRecords
+|RecordSearchRequestDto, Long userId, Long clubId
+|RecordSearchResponseDto
+|統合的な記録検索を行い、統計情報も含めて返却する
+
+|searchPersonalMatches
+|RecordSearchRequestDto, Long userId, Long clubId
+|Page<PersonalMatchRecordDto>
+|個人戦記録のみを検索する
+
+|searchTeamMatches
+|RecordSearchRequestDto, Long userId, Long clubId
+|Page<TeamMatchRecordDto>
+|団体戦記録のみを検索する
+
+|getRecordDetail
+|RecordType recordType, Long recordId, Long userId
+|RecordDetailViewDto
+|指定記録の詳細情報と関連データを取得する
+
+|getAvailableFilters
+|Long userId, Long clubId
+|RecordFilterOptionsDto
+|利用可能なフィルター選択肢を取得する
+|===
+
+=== 実装クラス
+
+`RecordSearchServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|personalMatchRecordRepository
+|PersonalMatchRecordRepository
+|個人戦記録検索用リポジトリ
+
+|teamMatchRecordRepository
+|TeamMatchRecordRepository
+|団体戦記録検索用リポジトリ
+
+|recordPermissionService
+|RecordPermissionService
+|権限チェック用サービス
+
+|recordStatisticsService
+|RecordStatisticsService
+|統計計算用サービス
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor
+|===
+
+=== 処理詳細
+
+==== searchRecords
+
+|===
+|順序 |概要 |詳細
+
+|1
+|検索条件の正規化
+|* デフォルト値の設定（page=0, size=20, sortBy=DATE_DESC）  
+* 日付範囲の妥当性チェック  
+* includeClubRecords が true の場合、clubId を検索条件に追加
+
+|2
+|権限フィルタリング条件構築
+|* 自分の記録（userId 一致）は常に含める  
+* includeClubRecords が true かつ clubId が存在する場合、クラブ公開記録も含める  
+* visibility=PRIVATE の記録は自分のもののみ
+
+|3
+|個人戦記録検索
+|* recordType が null または PERSONAL の場合実行  
+* personalMatchRecordRepository.searchRecords(searchCriteria, permissions) を呼び出し
+
+|4
+|団体戦記録検索
+|* recordType が null または TEAM の場合実行  
+* teamMatchRecordRepository.searchRecords(searchCriteria, permissions) を呼び出し
+
+|5
+|統計情報計算
+|* recordStatisticsService.calculateSearchSummary() で統計情報を算出  
+* 総記録数、勝利数、引き分け数、最近の大会等
+
+|6
+|利用可能フィルター取得
+|* getAvailableFilters(userId, clubId) で利用可能なフィルター選択肢を取得
+
+|7
+|レスポンス生成
+|RecordSearchResponseDto に以下の情報を設定して返却：  
+* personalMatches: 個人戦検索結果  
+* teamMatches: 団体戦検索結果  
+* searchCriteria: 適用された検索条件  
+* searchSummary: 統計情報  
+* availableFilters: フィルター選択肢
+|===
+
+==== getRecordDetail
+
+|===
+|順序 |概要 |詳細
+
+|1
+|記録の取得
+|* recordType に応じて適切なリポジトリから記録を取得  
+* PERSONAL: personalMatchRecordRepository.findByIdWithDetails()  
+* TEAM: teamMatchRecordRepository.findByIdWithDetails()  
+* 見つからない場合は `RecordNotFoundException` をスロー → `MSG_REC_0013`
+
+|2
+|閲覧権限確認
+|* recordPermissionService.validateViewPermission(userId, recordId, recordType) で権限確認  
+* 権限がない場合は `AccessDeniedException` をスロー → `MSG_REC_0029`
+
+|3
+|関連記録の取得
+|* 同じ大会の記録を取得  
+* 同じ対戦相手との記録を取得（最大5件）  
+* 権限のある記録のみフィルタリング
+
+|4
+|編集履歴の取得
+|* 記録の編集権限がある場合のみ、編集申請履歴を取得  
+* recordEditRequestRepository.findByRecordId(recordId, recordType)
+
+|5
+|共有URL生成
+|* 記録がクラブ公開の場合、共有用URLを生成  
+* セキュリティを考慮したトークンベースのURL
+
+|6
+|統計情報の計算
+|* recordStatisticsService.calculateRecordStatistics() で該当記録の統計を算出  
+* 対戦成績、使用技の分析等
+
+|7
+|レスポンス生成
+|RecordDetailViewDto に以下の情報を設定して返却：  
+* record: 記録詳細  
+* recordType: 記録種別  
+* relatedRecords: 関連記録  
+* editHistory: 編集履歴（権限がある場合のみ）  
+* shareUrl: 共有URL（共有可能な場合のみ）  
+* statistics: 統計情報
+|===
+
+== Repository定義
+
+=== 拡張メソッド
+
+既存のRepositoryに以下のメソッドを追加：
+
+==== PersonalMatchRecordRepository（追加）
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|searchRecords
+|RecordSearchCriteriaDto, Pageable
+|Page<PersonalMatchRecordDto>
+|複合条件での個人戦記録検索
+
+|findRelatedRecords
+|Long recordId, String criteria, Integer limit
+|List<PersonalMatchRecordDto>
+|関連記録の取得
+
+|getStatistics
+|Long userId, Long clubId
+|RecordStatisticsDto
+|ユーザー・クラブの統計情報取得
+|===
+
+==== TeamMatchRecordRepository（追加）
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|searchRecords
+|RecordSearchCriteriaDto, Pageable
+|Page<TeamMatchRecordDto>
+|複合条件での団体戦記録検索
+
+|findRelatedRecords
+|Long recordId, String criteria, Integer limit
+|List<TeamMatchRecordDto>
+|関連記録の取得
+
+|getStatistics
+|Long userId, Long clubId
+|RecordStatisticsDto
+|ユーザー・クラブの統計情報取得
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== 統合記録検索
+
+[source,sql]
+----
+-- 個人戦記録検索
+SELECT 
+    pm.*,
+    CASE 
+        WHEN pm.red_player_scores > pm.white_player_scores THEN 'red'
+        WHEN pm.white_player_scores > pm.red_player_scores THEN 'white'
+        ELSE 'draw'
+    END as winner
+FROM personal_matches pm
+WHERE 1=1
+  AND (#{userId} = pm.user_id OR (pm.visibility = 'CLUB' AND pm.club_id = #{clubId}))
+  AND (#{keyword} IS NULL OR 
+       pm.tournament_name LIKE CONCAT('%', #{keyword}, '%') OR
+       pm.red_player_name LIKE CONCAT('%', #{keyword}, '%') OR
+       pm.white_player_name LIKE CONCAT('%', #{keyword}, '%'))
+  AND (#{dateFrom} IS NULL OR pm.match_date >= #{dateFrom})
+  AND (#{dateTo} IS NULL OR pm.match_date <= #{dateTo})
+  AND (#{playerName} IS NULL OR 
+       pm.red_player_name LIKE CONCAT('%', #{playerName}, '%') OR
+       pm.white_player_name LIKE CONCAT('%', #{playerName}, '%'))
+  AND (#{tournamentName} IS NULL OR pm.tournament_name LIKE CONCAT('%', #{tournamentName}, '%'))
+ORDER BY 
+  CASE #{sortBy}
+    WHEN 'DATE_ASC' THEN pm.match_date
+    WHEN 'TOURNAMENT_NAME' THEN pm.tournament_name
+    ELSE pm.match_date
+  END ${sortBy == 'DATE_ASC' ? 'ASC' : 'DESC'}
+LIMIT #{limit} OFFSET #{offset}
+----
+
+==== 関連記録取得
+
+[source,sql]
+----
+-- 同じ大会の記録
+SELECT pm.* FROM personal_matches pm
+WHERE pm.tournament_name = (
+    SELECT tournament_name FROM personal_matches WHERE id = #{recordId}
+)
+AND pm.id != #{recordId}
+AND (#{userId} = pm.user_id OR (pm.visibility = 'CLUB' AND pm.club_id = #{clubId}))
+ORDER BY pm.match_date DESC
+LIMIT #{limit}
+----
+
+==== 統計情報取得
+
+[source,sql]
+----
+SELECT 
+    COUNT(*) as total_matches,
+    SUM(CASE 
+        WHEN (pm.red_player_scores > pm.white_player_scores) THEN 1 
+        ELSE 0 
+    END) as total_wins,
+    SUM(CASE 
+        WHEN (pm.red_player_scores = pm.white_player_scores) THEN 1 
+        ELSE 0 
+    END) as total_draws,
+    COUNT(DISTINCT pm.tournament_name) as tournament_count,
+    COUNT(DISTINCT 
+        CASE WHEN pm.red_player_name != #{currentUserName} 
+             THEN pm.red_player_name 
+             ELSE pm.white_player_name 
+        END
+    ) as opponent_count
+FROM personal_matches pm
+WHERE pm.user_id = #{userId}
+----
+
+== RecordStatisticsService定義
+
+記録の統計計算を行う専用サービス
+
+=== メソッド定義
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|calculateSearchSummary
+|RecordSearchCriteriaDto, Long userId, Long clubId
+|RecordSearchSummaryDto
+|検索結果の統計サマリーを計算
+
+|calculateRecordStatistics
+|RecordType recordType, Long recordId, Long userId
+|RecordStatisticsDto
+|特定記録の詳細統計を計算
+
+|getUserStatistics
+|Long userId
+|UserRecordStatisticsDto
+|ユーザーの全体統計を計算
+
+|getClubStatistics
+|Long clubId
+|ClubRecordStatisticsDto
+|クラブの全体統計を計算
+|===
+
+== 業務ルール
+
+=== 検索権限ルール
+
+1. **自分の記録**: 公開設定に関係なく全て検索可能
+2. **クラブ公開記録**: 同じクラブメンバーのみ検索可能
+3. **プライベート記録**: 記録者本人のみ検索可能
+
+=== 検索精度ルール
+
+* **部分一致**: 大会名、選手名、クラブ名で部分一致検索
+* **完全一致**: 記録種別、公開設定で完全一致フィルタリング
+* **範囲検索**: 試合日で範囲絞り込み
+* **複合検索**: 複数条件の AND 結合
+
+=== パフォーマンス考慮
+
+* **インデックス活用**: 検索頻度の高いカラムにインデックス設定
+* **ページネーション**: 大量データに対する効率的な分割表示
+* **キャッシュ活用**: 統計情報やフィルター選択肢のキャッシュ
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== 統合記録検索リクエスト
+
+```
+GET /api/records/search?keyword=全日本&dateFrom=2024-01-01&recordType=PERSONAL&winnerOnly=true&page=0&size=10
+Authorization: Bearer {jwt-token}
+```
+
+==== 統合記録検索レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "personalMatches": {
+        "content": [
+            {
+                "id": 123,
+                "tournamentName": "第30回 全日本剣道選手権大会",
+                "matchDate": "2024-01-15",
+                "round": "準決勝",
+                "redPlayer": {
+                    "name": "田中太郎",
+                    "clubName": "東京剣道クラブ",
+                    "totalPoints": 2,
+                    "isWinner": true
+                },
+                "whitePlayer": {
+                    "name": "佐藤花子",
+                    "clubName": "大阪剣道クラブ",
+                    "totalPoints": 1,
+                    "isWinner": false
+                },
+                "visibility": "CLUB",
+                "canEdit": true,
+                "canDelete": true
+            }
+        ],
+        "totalElements": 1,
+        "number": 0,
+        "size": 10
+    },
+    "teamMatches": {
+        "content": [],
+        "totalElements": 0,
+        "number": 0,
+        "size": 10
+    },
+    "searchSummary": {
+        "totalPersonalMatches": 1,
+        "totalTeamMatches": 0,
+        "totalWins": 1,
+        "totalDraws": 0,
+        "recentTournaments": ["第30回 全日本剣道選手権大会"],
+        "frequentOpponents": ["佐藤花子"]
+    },
+    "availableFilters": {
+        "availableTournaments": ["第30回 全日本剣道選手権大会", "関東剣道大会"],
+        "availableClubs": ["東京剣道クラブ", "大阪剣道クラブ"],
+        "dateRange": {
+            "earliest": "2024-01-01",
+            "latest": "2024-01-15"
+        }
+    }
+}
+```
+
+==== 記録詳細取得リクエスト
+
+```
+GET /api/records/search/PERSONAL/123
+Authorization: Bearer {jwt-token}
+```
+
+==== 記録詳細取得レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "record": {
+        "id": 123,
+        "tournamentName": "第30回 全日本剣道選手権大会",
+        "matchDate": "2024-01-15",
+        "round": "準決勝",
+        "redPlayer": {
+            "name": "田中太郎",
+            "clubName": "東京剣道クラブ",
+            "scores": ["MEN", "KOTE"],
+            "totalPoints": 2,
+            "isWinner": true
+        },
+        "whitePlayer": {
+            "name": "佐藤花子",
+            "clubName": "大阪剣道クラブ",
+            "scores": ["DOU"],
+            "totalPoints": 1,
+            "isWinner": false
+        },
+        "visibility": "CLUB",
+        "canEdit": true,
+        "canDelete": true,
+        "createdAt": "2024-01-15T10:30:00"
+    },
+    "recordType": "PERSONAL",
+    "relatedRecords": [
+        {
+            "id": 124,
+            "tournamentName": "第30回 全日本剣道選手権大会",
+            "round": "決勝",
+            "matchDate": "2024-01-15"
+        }
+    ],
+    "editHistory": [],
+    "shareUrl": "https://kendo-system.com/shared/abc123def",
+    "statistics": {
+        "userTotalMatches": 25,
+        "userWinRate": 0.72,
+        "opponentHistory": {
+            "totalMatches": 3,
+            "wins": 2,
+            "draws": 1
+        }
+    }
+}
+```
