@@ -1,0 +1,419 @@
+= メール認証API 詳細設計書
+
+== 概要
+
+emailVerificationApi
+
+新規登録時に送信されたメール認証リンクをクリックしてメールアドレスの有効性を確認するAPI。
+
+== Bean定義
+
+=== Entity定義
+
+==== EmailVerificationTokenEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|トークンID
+
+|userId
+|Long
+|対象ユーザーID
+
+|token
+|String
+|認証用トークン
+
+|expiresAt
+|LocalDateTime
+|有効期限
+
+|isVerified
+|Boolean
+|認証済みかどうか
+
+|createdAt
+|LocalDateTime
+|発行日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== Dto定義
+
+==== EmailVerificationRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|token
+|String
+|@NotBlank, @Size(max=255)
+|認証トークン
+|===
+
+==== EmailVerificationResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|isSuccessful
+|Boolean
+|認証成功フラグ
+
+|userId
+|Long
+|認証されたユーザーID
+
+|email
+|String
+|認証されたメールアドレス
+
+|verifiedAt
+|LocalDateTime
+|認証完了日時
+
+|redirectUrl
+|String
+|認証後のリダイレクトURL
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|tokenが空の場合
+|認証トークンは必須です。
+|MSG_ACC_0008
+|400
+
+|2
+|トークンが無効の場合
+|メール認証トークンが無効または期限切れです。
+|MSG_ACC_0006
+|400
+
+|3
+|既に認証済みの場合
+|このメールアドレスは既に認証済みです。
+|MSG_ACC_0009
+|409
+
+|4
+|ユーザーが見つからない場合
+|対象ユーザーが見つかりません。
+|MSG_SYS_0001
+|404
+
+|5
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`EmailVerificationController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|emailVerificationService
+|EmailVerificationService
+|メール認証処理を行うサービス。`@RequiredArgsConstructor` によりインジェクション。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/auth"), @RequiredArgsConstructor
+
+|メソッド（認証実行）
+|@PostMapping("/verify-email")
+
+|引数
+|@RequestBody
+|===
+
+=== メソッド名
+
+* `verifyEmail` - メール認証実行
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|verifyEmail
+|ResponseEntity<EmailVerificationResponseDto>
+|認証結果を返却
+|===
+
+=== 処理詳細
+
+==== verifyEmail
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領・バリデーション
+|リクエストボディから認証トークンを取得。
+トークンの形式をバリデーション。
+
+|2
+|トークン検証
+|emailVerificationService.verifyToken(token) でトークンの有効性を確認。
+
+|3
+|ユーザー認証状態更新
+|users.is_email_verified を true に更新。
+
+|4
+|トークン無効化
+|email_verification_tokens.is_verified を true に設定。
+
+|5
+|レスポンス生成
+|認証結果を含む EmailVerificationResponseDto を返却。
+
+|–
+|エラー処理
+|* トークンが無効の場合は MSG_ACC_0006 を返却  
+* 既に認証済みの場合は MSG_ACC_0009 を返却  
+* ユーザーが見つからない場合は MSG_SYS_0001 を返却
+|===
+
+== Service定義
+
+=== インターフェース
+
+`EmailVerificationService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|verifyToken
+|String token
+|EmailVerificationResponseDto
+|認証トークンを検証し、メール認証を完了する
+
+|generateVerificationToken
+|Long userId
+|String
+|認証トークンを生成する
+
+|resendVerificationEmail
+|String email
+|void
+|認証メールを再送信する
+|===
+
+=== 実装クラス
+
+`EmailVerificationServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|emailVerificationTokenRepository
+|EmailVerificationTokenRepository
+|認証トークン管理用リポジトリ
+
+|userRepository
+|UserRepository
+|ユーザー管理用リポジトリ
+
+|emailService
+|EmailService
+|メール送信サービス
+
+|tokenGenerator
+|TokenGenerator
+|トークン生成ユーティリティ
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== 処理詳細
+
+==== verifyToken
+
+|===
+|順序 |概要 |詳細
+
+|1
+|トークン取得・検証
+|* emailVerificationTokenRepository.findByToken(token) でトークンを取得  
+* トークンが見つからない場合は `InvalidTokenException` をスロー → `MSG_ACC_0006`  
+* 有効期限をチェック、期限切れの場合は `ExpiredTokenException` をスロー → `MSG_ACC_0006`
+
+|2
+|重複認証チェック
+|* トークンの is_verified が true の場合は `AlreadyVerifiedException` をスロー → `MSG_ACC_0009`
+
+|3
+|ユーザー状態更新
+|* userRepository.updateEmailVerified(userId, true) でユーザーの認証状態を更新  
+* 更新に失敗した場合は `UserUpdateException` をスロー → `MSG_SYS_0003`
+
+|4
+|トークン無効化
+|* emailVerificationTokenRepository.markAsVerified(tokenId) でトークンを無効化
+
+|5
+|レスポンス生成
+|EmailVerificationResponseDto を生成して返却：  
+* isSuccessful: true  
+* userId: 認証されたユーザーID  
+* email: 認証されたメールアドレス  
+* verifiedAt: 認証完了日時  
+* redirectUrl: ログインページURL
+
+|–
+|エラー処理
+|* 各種例外をスローし、適切なエラーメッセージを返す  
+* トランザクション失敗時はロールバック実行
+|===
+
+== Repository定義
+
+=== 使用メソッド
+
+==== EmailVerificationTokenRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|findByToken
+|String token
+|Optional<EmailVerificationTokenEntity>
+|トークンで認証情報を取得
+
+|markAsVerified
+|Long tokenId
+|void
+|トークンを認証済みにマーク
+
+|deleteExpiredTokens
+|LocalDateTime cutoff
+|void
+|期限切れトークンを削除
+
+|countByUserId
+|Long userId
+|Integer
+|ユーザーの未認証トークン数を取得
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== トークン検証
+
+[source,sql]
+----
+SELECT 
+    evt.id,
+    evt.user_id,
+    evt.token,
+    evt.expires_at,
+    evt.is_verified,
+    u.email,
+    u.is_email_verified
+FROM email_verification_tokens evt
+JOIN users u ON evt.user_id = u.id
+WHERE evt.token = #{token}
+  AND evt.is_verified = false
+  AND evt.expires_at > NOW()
+----
+
+==== ユーザー認証状態更新
+
+[source,sql]
+----
+UPDATE users 
+SET 
+    is_email_verified = true,
+    updated_at = NOW()
+WHERE id = #{userId}
+  AND is_email_verified = false
+----
+
+==== トークン無効化
+
+[source,sql]
+----
+UPDATE email_verification_tokens 
+SET 
+    is_verified = true,
+    updated_at = NOW()
+WHERE id = #{tokenId}
+----
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== メール認証リクエスト
+
+```
+POST /api/auth/verify-email
+Content-Type: application/json
+
+{
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+==== メール認証レスポンス（成功）
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "isSuccessful": true,
+    "userId": 12345,
+    "email": "user@example.com",
+    "verifiedAt": "2024-03-15T10:30:00",
+    "redirectUrl": "/login?verified=true"
+}
+```
+
+==== メール認証レスポンス（エラー）
+
+```json
+HTTP/1.1 400 Bad Request
+Content-Type: application/json
+
+{
+    "error": "INVALID_TOKEN",
+    "message": "メール認証トークンが無効または期限切れです。",
+    "messageId": "MSG_ACC_0006",
+    "timestamp": "2024-03-15T10:30:00"
+}
+```

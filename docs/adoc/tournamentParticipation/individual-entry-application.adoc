@@ -1,0 +1,750 @@
+= 個人戦エントリー申請API 詳細設計書
+
+== 概要
+
+individualEntryApplicationApi
+
+大会の個人戦部門にユーザー個人が参加申請を行うAPI。
+
+== Bean定義
+
+=== 共通定義の参照
+
+基本的なEntity、Dto、エラーメッセージについては link:common-definitions.adoc[大会参加機能 共通定義] を参照すること。
+
+=== Entity定義
+
+==== TournamentIndividualEntryEntity
+
+|===
+|フィールド名 |型 |説明
+
+|id
+|Long
+|個人戦エントリーID
+
+|tournamentId
+|Long
+|対象大会ID
+
+|userId
+|Long
+|選手ユーザーID
+
+|status
+|EntryStatus
+|エントリー状態（pending, approved, withdrawn）
+
+|createdAt
+|LocalDateTime
+|登録日時
+
+|updatedAt
+|LocalDateTime
+|更新日時
+|===
+
+=== Dto定義
+
+==== IndividualEntryApplicationRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|tournamentId
+|Long
+|@NotNull
+|大会ID
+
+|participantName
+|String
+|@NotBlank, @Size(max=50)
+|参加者名
+
+|affiliatedClub
+|String
+|@Size(max=100)
+|所属クラブ名（任意）
+
+|contactEmail
+|String
+|@Email, @Size(max=100)
+|連絡先メールアドレス（任意）
+
+|notes
+|String
+|@Size(max=500)
+|備考（任意）
+
+|agreeToTerms
+|Boolean
+|@AssertTrue
+|利用規約への同意
+|===
+
+==== IndividualEntryApplicationResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|entryId
+|Long
+|作成されたエントリーID
+
+|tournamentId
+|Long
+|大会ID
+
+|tournamentName
+|String
+|大会名
+
+|participantName
+|String
+|参加者名
+
+|status
+|EntryStatus
+|エントリー状態
+
+|submittedAt
+|LocalDateTime
+|申請日時
+
+|approvalRequired
+|Boolean
+|承認が必要かどうか
+
+|estimatedApprovalDate
+|LocalDate
+|承認予定日
+
+|nextSteps
+|List<String>
+|次のステップ
+
+|warnings
+|List<String>
+|警告メッセージ
+|===
+
+==== IndividualEntryListRequestDto
+
+|===
+|フィールド名 |型 |バリデーション |説明
+
+|status
+|EntryStatus
+|
+|エントリー状態フィルター
+
+|fromDate
+|LocalDate
+|
+|申請日開始
+
+|toDate
+|LocalDate
+|@DateRange
+|申請日終了
+
+|tournamentName
+|String
+|@Size(max=100)
+|大会名検索
+
+|page
+|Integer
+|@Min(0)
+|ページ番号
+
+|size
+|Integer
+|@Min(1), @Max(50)
+|ページサイズ
+
+|sortBy
+|IndividualEntrySortType
+|
+|ソート方法
+|===
+
+==== IndividualEntryListResponseDto
+
+|===
+|フィールド名 |型 |説明
+
+|entries
+|Page<IndividualEntryDto>
+|エントリー一覧
+
+|summary
+|IndividualEntrySummaryDto
+|サマリー情報
+
+|availableFilters
+|EntryFilterOptionsDto
+|利用可能なフィルター
+|===
+
+==== IndividualEntryDto
+
+|===
+|フィールド名 |型 |説明
+
+|entryId
+|Long
+|エントリーID
+
+|tournamentId
+|Long
+|大会ID
+
+|tournamentName
+|String
+|大会名
+
+|participantName
+|String
+|参加者名
+
+|affiliatedClub
+|String
+|所属クラブ名
+
+|status
+|EntryStatus
+|エントリー状態
+
+|submittedAt
+|LocalDateTime
+|申請日時
+
+|eventDate
+|LocalDate
+|大会開催日
+
+|venue
+|String
+|開催会場
+
+|canEdit
+|Boolean
+|編集可能かどうか
+
+|canWithdraw
+|Boolean
+|取り消し可能かどうか
+|===
+
+=== Enum定義
+
+==== IndividualEntrySortType
+
+|===
+|値 |説明
+
+|SUBMITTED_DESC
+|申請日時降順
+
+|SUBMITTED_ASC
+|申請日時昇順
+
+|EVENT_DATE_ASC
+|大会開催日昇順
+
+|TOURNAMENT_NAME_ASC
+|大会名昇順
+
+|STATUS_ASC
+|ステータス昇順
+|===
+
+=== バリデーションエラー一覧
+
+|===
+|項番 |条件 |エラー内容 |メッセージID |ステータス
+
+|1
+|tournamentIdがnullの場合
+|大会IDは必須です。
+|MSG_PTC_0001
+|400
+
+|2
+|participantNameが空の場合
+|参加者名は必須です。
+|MSG_PTC_0002
+|400
+
+|3
+|利用規約に同意していない場合
+|利用規約への同意が必要です。
+|MSG_PTC_0019
+|400
+
+|4
+|大会が見つからない場合
+|指定された大会が見つかりません。
+|MSG_PTC_0020
+|404
+
+|5
+|個人戦が対象外の大会の場合
+|この大会は個人戦エントリーを受け付けていません。
+|MSG_PTC_0021
+|400
+
+|6
+|エントリー期間外の場合
+|エントリー受付期間外です。
+|MSG_PTC_0005
+|403
+
+|7
+|既にエントリー済みの場合
+|既にこの大会にエントリー済みです。
+|MSG_PTC_0022
+|409
+
+|8
+|大会の参加上限に達している場合
+|大会の参加上限に達しています。
+|MSG_PTC_0023
+|403
+
+|9
+|システムエラーが発生した場合
+|システムエラーが発生しました。
+|MSG_SYS_0003
+|500
+|===
+
+== Controller定義
+
+=== クラス名
+
+`IndividualEntryController`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|individualEntryService
+|IndividualEntryService
+|個人戦エントリー処理を行うサービス。`@RequiredArgsConstructor` によりインジェクション。
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@RestController, @RequestMapping("/api/tournaments/individual-entries"), @RequiredArgsConstructor
+
+|メソッド（エントリー申請）
+|@PostMapping
+
+|メソッド（エントリー一覧取得）
+|@GetMapping
+
+|メソッド（エントリー詳細取得）
+|@GetMapping("/{entryId}")
+
+|メソッド（エントリー取り消し）
+|@DeleteMapping("/{entryId}")
+
+|引数
+|@RequestBody, @PathVariable, @RequestParam, @AuthenticationPrincipal
+|===
+
+=== メソッド名
+
+* `submitIndividualEntry` - 個人戦エントリー申請
+* `getIndividualEntries` - 個人戦エントリー一覧取得
+* `getIndividualEntryDetail` - 個人戦エントリー詳細取得
+* `withdrawIndividualEntry` - 個人戦エントリー取り消し
+
+=== 戻り値
+
+|===
+|メソッド |戻り値型 |説明
+
+|submitIndividualEntry
+|ResponseEntity<IndividualEntryApplicationResponseDto>
+|申請結果を返却
+
+|getIndividualEntries
+|ResponseEntity<IndividualEntryListResponseDto>
+|エントリー一覧を返却
+
+|getIndividualEntryDetail
+|ResponseEntity<IndividualEntryDto>
+|エントリー詳細を返却
+
+|withdrawIndividualEntry
+|ResponseEntity<Void>
+|取り消し結果を返却
+|===
+
+=== 処理詳細
+
+==== submitIndividualEntry
+
+|===
+|順序 |概要 |詳細
+
+|1
+|リクエスト受領・認証
+|リクエストボディからエントリー申請データを取得。
+ユーザー認証情報を確認。
+
+|2
+|大会存在・状態確認
+|tournamentService.getTournament(tournamentId) で大会情報を取得し、個人戦エントリー可能かチェック。
+
+|3
+|重複チェック
+|individualEntryService.checkDuplicateEntry(tournamentId, userId) で重複エントリーをチェック。
+
+|4
+|エントリー条件確認
+|大会のエントリー期間、参加上限等の条件をチェック。
+
+|5
+|サービス呼び出し
+|individualEntryService.submitEntry(requestDto, userId) を呼び出す。
+
+|6
+|レスポンス生成
+|申請結果を含む IndividualEntryApplicationResponseDto を返却。
+
+|–
+|エラー処理
+|* 大会が見つからない場合は MSG_PTC_0020 を返却  
+* 個人戦対象外の場合は MSG_PTC_0021 を返却  
+* 重複エントリーの場合は MSG_PTC_0022 を返却  
+* エントリー期間外の場合は MSG_PTC_0005 を返却
+|===
+
+== Service定義
+
+=== インターフェース
+
+`IndividualEntryService`
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|submitEntry
+|IndividualEntryApplicationRequestDto, Long userId
+|IndividualEntryApplicationResponseDto
+|個人戦エントリーを申請する
+
+|getEntries
+|IndividualEntryListRequestDto, Long userId
+|IndividualEntryListResponseDto
+|ユーザーの個人戦エントリー一覧を取得する
+
+|getEntryDetail
+|Long entryId, Long userId
+|IndividualEntryDto
+|個人戦エントリー詳細を取得する
+
+|withdrawEntry
+|Long entryId, Long userId
+|void
+|個人戦エントリーを取り消す
+
+|checkDuplicateEntry
+|Long tournamentId, Long userId
+|Boolean
+|重複エントリーをチェックする
+|===
+
+=== 実装クラス
+
+`IndividualEntryServiceImpl`
+
+=== フィールド
+
+|===
+|名称 |型 |説明
+
+|individualEntryRepository
+|IndividualEntryRepository
+|個人戦エントリー管理用リポジトリ
+
+|tournamentService
+|TournamentService
+|大会情報取得用サービス
+
+|entryValidationService
+|EntryValidationService
+|エントリー条件検証用サービス
+
+|notificationService
+|NotificationService
+|通知送信サービス
+|===
+
+=== アノテーション
+
+|===
+|対象 |アノテーション
+
+|クラス
+|@Service, @RequiredArgsConstructor, @Transactional
+|===
+
+=== 処理詳細
+
+==== submitEntry
+
+|===
+|順序 |概要 |詳細
+
+|1
+|大会情報取得・検証
+|* tournamentService.getTournament(tournamentId) で大会情報を取得  
+* 大会が見つからない場合は `TournamentNotFoundException` をスロー → `MSG_PTC_0020`  
+* 個人戦対象でない場合は `IndividualEntryNotSupportedException` をスロー → `MSG_PTC_0021`
+
+|2
+|エントリー条件検証
+|* entryValidationService.validateIndividualEntry() でエントリー条件をチェック：  
+** エントリー期間内かチェック → `MSG_PTC_0005`  
+** 参加上限に達していないかチェック → `MSG_PTC_0023`  
+** 重複エントリーでないかチェック → `MSG_PTC_0022`
+
+|3
+|エントリー作成・保存
+|* TournamentIndividualEntryEntity を作成  
+* 初期ステータスを 'pending' に設定  
+* individualEntryRepository.save() でエントリーを保存
+
+|4
+|通知処理
+|* 大会主催者への新規エントリー通知を送信  
+* ユーザーへのエントリー完了通知を送信
+
+|5
+|統計情報更新
+|* 大会のエントリー数統計を更新
+
+|6
+|レスポンス生成
+|IndividualEntryApplicationResponseDto を生成して返却：  
+* entryId: 作成されたエントリーID  
+* tournamentName: 大会名  
+* participantName: 参加者名  
+* status: エントリー状態  
+* submittedAt: 申請日時  
+* approvalRequired: 承認が必要か  
+* nextSteps: 次のステップの説明
+
+|–
+|エラー処理
+|* 各種例外をスローし、適切なエラーメッセージを返す  
+* トランザクション失敗時はロールバック実行
+|===
+
+== Repository定義
+
+=== 使用メソッド
+
+==== IndividualEntryRepository
+
+|===
+|メソッド名 |パラメータ |戻り値 |説明
+
+|save
+|TournamentIndividualEntryEntity
+|TournamentIndividualEntryEntity
+|個人戦エントリーを保存
+
+|findByUserIdAndTournamentId
+|Long userId, Long tournamentId
+|Optional<TournamentIndividualEntryEntity>
+|ユーザーと大会による重複チェック
+
+|findByUserId
+|Long userId, Pageable
+|Page<TournamentIndividualEntryEntity>
+|ユーザーのエントリー一覧を取得
+
+|findById
+|Long entryId
+|Optional<TournamentIndividualEntryEntity>
+|エントリー詳細を取得
+
+|updateStatus
+|Long entryId, EntryStatus status
+|void
+|エントリー状態を更新
+
+|countByTournamentIdAndStatus
+|Long tournamentId, EntryStatus status
+|Integer
+|大会の承認済みエントリー数を取得
+|===
+
+=== 使用クエリ（MyBatis）
+
+==== エントリー一覧取得
+
+[source,sql]
+----
+SELECT 
+    ie.id as entry_id,
+    ie.tournament_id,
+    ie.user_id,
+    ie.status,
+    ie.created_at as submitted_at,
+    t.name as tournament_name,
+    t.event_date,
+    t.venue,
+    up.name as participant_name,
+    cm.club_id,
+    c.name as affiliated_club
+FROM tournament_individual_entries ie
+JOIN tournaments t ON ie.tournament_id = t.id
+JOIN user_profiles up ON ie.user_id = up.user_id
+LEFT JOIN club_members cm ON ie.user_id = cm.user_id
+LEFT JOIN clubs c ON cm.club_id = c.id
+WHERE ie.user_id = #{userId}
+  AND (#{status} IS NULL OR ie.status = #{status})
+  AND (#{fromDate} IS NULL OR DATE(ie.created_at) >= #{fromDate})
+  AND (#{toDate} IS NULL OR DATE(ie.created_at) <= #{toDate})
+  AND (#{tournamentName} IS NULL OR t.name LIKE CONCAT('%', #{tournamentName}, '%'))
+ORDER BY 
+  CASE #{sortBy}
+    WHEN 'SUBMITTED_DESC' THEN ie.created_at
+    WHEN 'EVENT_DATE_ASC' THEN t.event_date
+    WHEN 'TOURNAMENT_NAME_ASC' THEN t.name
+    ELSE ie.created_at
+  END DESC
+LIMIT #{limit} OFFSET #{offset}
+----
+
+==== 重複エントリーチェック
+
+[source,sql]
+----
+SELECT COUNT(*)
+FROM tournament_individual_entries
+WHERE tournament_id = #{tournamentId}
+  AND user_id = #{userId}
+  AND status != 'withdrawn'
+----
+
+==== 大会エントリー数チェック
+
+[source,sql]
+----
+SELECT 
+    COUNT(CASE WHEN ie.status = 'approved' THEN 1 END) as approved_count,
+    t.max_participants
+FROM tournament_individual_entries ie
+RIGHT JOIN tournaments t ON ie.tournament_id = t.id
+WHERE t.id = #{tournamentId}
+GROUP BY t.id, t.max_participants
+----
+
+== 実装例
+
+=== HTTP Request/Response例
+
+==== 個人戦エントリー申請リクエスト
+
+```
+POST /api/tournaments/individual-entries
+Authorization: Bearer {jwt-token}
+Content-Type: application/json
+
+{
+    "tournamentId": 123,
+    "participantName": "山田太郎",
+    "affiliatedClub": "東京剣道クラブ",
+    "contactEmail": "yamada@example.com",
+    "notes": "初参加です。よろしくお願いします。",
+    "agreeToTerms": true
+}
+```
+
+==== 個人戦エントリー申請レスポンス
+
+```json
+HTTP/1.1 201 Created
+Content-Type: application/json
+
+{
+    "entryId": 456,
+    "tournamentId": 123,
+    "tournamentName": "第30回 全日本剣道個人選手権大会",
+    "participantName": "山田太郎",
+    "status": "pending",
+    "submittedAt": "2024-03-15T10:30:00",
+    "approvalRequired": true,
+    "estimatedApprovalDate": "2024-03-20",
+    "nextSteps": [
+        "主催者による承認をお待ちください",
+        "承認後、詳細な参加案内をメールでお送りします",
+        "大会1週間前に最終確認のご連絡をいたします"
+    ],
+    "warnings": []
+}
+```
+
+==== 個人戦エントリー一覧取得リクエスト
+
+```
+GET /api/tournaments/individual-entries?status=approved&page=0&size=10&sortBy=EVENT_DATE_ASC
+Authorization: Bearer {jwt-token}
+```
+
+==== 個人戦エントリー一覧取得レスポンス
+
+```json
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{
+    "entries": {
+        "content": [
+            {
+                "entryId": 456,
+                "tournamentId": 123,
+                "tournamentName": "第30回 全日本剣道個人選手権大会",
+                "participantName": "山田太郎",
+                "affiliatedClub": "東京剣道クラブ",
+                "status": "approved",
+                "submittedAt": "2024-03-15T10:30:00",
+                "eventDate": "2024-04-15",
+                "venue": "東京体育館",
+                "canEdit": false,
+                "canWithdraw": true
+            }
+        ],
+        "totalElements": 1,
+        "number": 0,
+        "size": 10
+    },
+    "summary": {
+        "totalEntries": 1,
+        "pendingEntries": 0,
+        "approvedEntries": 1,
+        "withdrawnEntries": 0,
+        "upcomingTournaments": 1
+    },
+    "availableFilters": {
+        "statuses": [
+            {"status": "pending", "count": 0},
+            {"status": "approved", "count": 1},
+            {"status": "withdrawn", "count": 0}
+        ]
+    }
+}
+```

@@ -11,6 +11,8 @@
 * link:../accountManagement/login.adoc[ログインAPI 詳細設計書]
 * link:../accountManagement/register.adoc[新規登録API 詳細設計書]  
 * link:../accountManagement/logout.adoc[ログアウトAPI 詳細設計書]
+* link:../accountManagement/email-verification.adoc[メール認証API 詳細設計書]
+* link:../accountManagement/password-reset.adoc[パスワードリセットAPI 詳細設計書]
 
 === 対象ユーザ
 

@@ -18,10 +18,12 @@
 * link:../tournamentParticipation/player-registration.adoc[選手登録API 詳細設計書]
 * link:../tournamentParticipation/entry-content-editing.adoc[エントリー内容編集API 詳細設計書]
 * link:../tournamentParticipation/cancellation-request.adoc[キャンセル申請API 詳細設計書]
+* link:../tournamentParticipation/individual-entry-application.adoc[個人戦エントリー申請API 詳細設計書]
 
 === 対象ユーザ
 
-所属クラブの管理者
+* **団体戦エントリー**: 所属クラブの管理者
+* **個人戦エントリー**: 全ユーザー（クラブ所属は任意）
 
 === 機能一覧と詳細
 
@@ -43,6 +45,12 @@
 
 | エントリー状況確認
 | 自クラブのエントリー状況（承認待ち／承認済／辞退済など）を確認できる
+
+| 個人戦エントリー申請
+| ユーザー個人で大会の個人戦部門にエントリー申請する（クラブ所属は任意）
+
+| 個人戦エントリー管理
+| 個人戦のエントリー状況確認、取り消し申請を行う
 |===
 
 === 入力項目
